@@ -83,13 +83,6 @@ export default function HomeOfficeApp() {
     return bookings[key] || [];
   };
 
-  // Count how many supervisor slots are booked on a day
-  const getSuperCountForDay = (day: number) => {
-    const key = getKey(viewYear, viewMonth, day);
-    const dayBookings = bookings[key] || [];
-    return dayBookings.filter(id => id === 14).length;
-  };
-
   const isTooFarAhead = (day: number) => {
     const dateObj = new Date(viewYear, viewMonth, day);
     const maxDate = new Date(today);
