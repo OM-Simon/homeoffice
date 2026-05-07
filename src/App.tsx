@@ -176,6 +176,41 @@ export default function HomeOfficeApp() {
     return days;
   }, [viewYear, viewMonth, daysInMonth, firstDay]);
 
+  const exportToExcel = () => {
+    const rows: string[] = [];
+    rows.push("Mês;Agente;Total Dias;Dias pelo Utilizador;Dias pelo Supervisor");
+  
+    const months = [...new Set(Object.keys(bookings).map(k => k.slice(0, 7)))].sort();
+  
+    months.forEach(monthKey => {
+      const [y, m] = monthKey.split("-");
+      const monthName = `${MONTHS_PT[parseInt(m) - 1]} ${y}`;
+  
+      TEAM.filter(u => !u.isSuper).forEach(u => {
+        const daysForUser = Object.entries(bookings).filter(([key, users]) => {
+          return key.startsWith(monthKey) && (users.includes(u.id) || users.includes(-u.id));
+        });
+  
+        const totalDays = daysForUser.length;
+        if (totalDays === 0) return;
+  
+        const superDays = daysForUser.filter(([, users]) => users.includes(-u.id)).length;
+        const userDays = totalDays - superDays;
+  
+        rows.push(`${monthName};${u.name};${totalDays};${userDays};${superDays}`);
+      });
+    });
+  
+    const csvContent = "\uFEFF" + rows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `HO_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const usedBalance = getUserBookingsThisMonth(currentUser.id);
   const remaining = MONTHLY_BALANCE - usedBalance;
 
@@ -326,18 +361,28 @@ export default function HomeOfficeApp() {
       )}
 
       {/* View toggle */}
-      <div style={{ padding: "16px 24px 0", display: "flex", gap: 8 }}>
-        {["calendar", "team"].map(v => (
-          <button key={v} onClick={() => setView(v)} style={{
-            padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
-            background: view === v ? currentUser.color : "#ffffff10",
-            color: view === v && currentUser.isSuper ? "#000" : "#fff",
-            fontWeight: 600, fontSize: 13, transition: "all 0.2s",
-          }}>
-            {v === "calendar" ? "📅 Calendário" : "👥 Equipa"}
-          </button>
-        ))}
-      </div>
+<div style={{ padding: "16px 24px 0", display: "flex", gap: 8, alignItems: "center" }}>
+  {["calendar", "team"].map(v => (
+    <button key={v} onClick={() => setView(v)} style={{
+      padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
+      background: view === v ? currentUser.color : "#ffffff10",
+      color: view === v && currentUser.isSuper ? "#000" : "#fff",
+      fontWeight: 600, fontSize: 13, transition: "all 0.2s",
+    }}>
+      {v === "calendar" ? "📅 Calendário" : "👥 Equipa"}
+    </button>
+  ))}
+
+  {currentUser.isSuper && (
+    <button onClick={exportToExcel} style={{
+      padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
+      background: "#22c55e", color: "#000",
+      fontWeight: 600, fontSize: 13, marginLeft: "auto",
+    }}>
+      📊 Exportar Excel
+    </button>
+  )}
+</div>
 
       {view === "calendar" ? (
         <div style={{ padding: "16px 24px 32px" }}>
