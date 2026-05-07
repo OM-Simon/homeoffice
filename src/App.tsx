@@ -3,23 +3,27 @@ import { db } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
 const TEAM = [
-  { id: 1,  name: "Beatriz dos Santos",      avatar: "BS", color: "#6366f1" },
-  { id: 2,  name: "Cláudia Fortunato",       avatar: "CF", color: "#f59e0b" },
-  { id: 3,  name: "Elisabete França",        avatar: "EFr", color: "#10b981" },
-  { id: 4,  name: "Eva Fernandes",           avatar: "EFe", color: "#ef4444" },
-  { id: 5,  name: "João Santos",             avatar: "JSa", color: "#8b5cf6" },
-  { id: 6,  name: "João Silva",              avatar: "JSi", color: "#06b6d4" },
-  { id: 7,  name: "Liane Bento",             avatar: "LB", color: "#f43f5e" },
-  { id: 8,  name: "Luis Abreu",              avatar: "LA", color: "#84cc16" },
-  { id: 9,  name: "Miguel Fonseca",          avatar: "MF", color: "#fb923c" },
-  { id: 10, name: "Nuno Lopes",              avatar: "NL", color: "#a78bfa" },
-  { id: 11, name: "Ricardo Anderson",        avatar: "RA", color: "#2dd4bf" },
-  { id: 12, name: "Ricardo Coelho",          avatar: "RC", color: "#fb7185" },
-  { id: 13, name: "Rui Santos",              avatar: "RS", color: "#facc15" },
+  { id: 1,  name: "Beatriz dos Santos",      avatar: "BS", color: "#6366f1", isSuper: false },
+  { id: 2,  name: "Cláudia Fortunato",       avatar: "CF", color: "#f59e0b", isSuper: false },
+  { id: 3,  name: "Elisabete França",        avatar: "EFr", color: "#10b981", isSuper: false },
+  { id: 4,  name: "Eva Fernandes",           avatar: "EFe", color: "#ef4444", isSuper: false },
+  { id: 5,  name: "João Santos",             avatar: "JSa", color: "#8b5cf6", isSuper: false },
+  { id: 6,  name: "João Silva",              avatar: "JSi", color: "#06b6d4", isSuper: false },
+  { id: 7,  name: "Liane Bento",             avatar: "LB", color: "#f43f5e", isSuper: false },
+  { id: 8,  name: "Luis Abreu",              avatar: "LA", color: "#84cc16", isSuper: false },
+  { id: 9,  name: "Miguel Fonseca",          avatar: "MF", color: "#fb923c", isSuper: false },
+  { id: 10, name: "Nuno Lopes",              avatar: "NL", color: "#a78bfa", isSuper: false },
+  { id: 11, name: "Ricardo Anderson",        avatar: "RA", color: "#2dd4bf", isSuper: false },
+  { id: 12, name: "Ricardo Coelho",          avatar: "RC", color: "#fb7185", isSuper: false },
+  { id: 13, name: "Rui Santos",              avatar: "RS", color: "#facc15", isSuper: false },
+  { id: 14, name: "Supervisor",              avatar: "SV", color: "#ffffff", isSuper: true  },
 ];
+
+const SUPER_PASSWORD = "Telma_OM92";
 
 const MONTHLY_BALANCE = 7;
 const MAX_PER_DAY = 5;
+const MAX_DAYS_AHEAD = 30;
 
 const today = new Date();
 const currentYear = today.getFullYear();
@@ -42,6 +46,7 @@ export default function HomeOfficeApp() {
   const [bookings, setBookings] = useState<Record<string, number[]>>({});
   const [view, setView] = useState("calendar");
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
+  const [superCount, setSuperCount] = useState(1);
 
   useEffect(() => {
     const ref = doc(db, "bookings", "all");
@@ -78,10 +83,23 @@ export default function HomeOfficeApp() {
     return bookings[key] || [];
   };
 
+  // Count how many supervisor slots are booked on a day
+  const getSuperCountForDay = (day: number) => {
+    const key = getKey(viewYear, viewMonth, day);
+    const dayBookings = bookings[key] || [];
+    return dayBookings.filter(id => id === 14).length;
+  };
+
+  const isTooFarAhead = (day: number) => {
+    const dateObj = new Date(viewYear, viewMonth, day);
+    const maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + MAX_DAYS_AHEAD);
+    return dateObj > maxDate;
+  };
+
   const toggleBooking = async (day: number) => {
     const key = getKey(viewYear, viewMonth, day);
     const dayBookings = bookings[key] || [];
-    const isBooked = dayBookings.includes(currentUser.id);
     const dateObj = new Date(viewYear, viewMonth, day);
     const dayOfWeek = dateObj.getDay();
 
@@ -89,6 +107,41 @@ export default function HomeOfficeApp() {
 
     const isPast = dateObj < new Date(today.getFullYear(), today.getMonth(), today.getDate());
     if (isPast) { showToast("Não podes alterar dias passados.", "error"); return; }
+
+    // Supervisor logic
+    if (currentUser.isSuper) {
+      const currentSuperSlots = dayBookings.filter(id => id === 14).length;
+      const nonSuperCount = dayBookings.filter(id => id !== 14).length;
+
+      if (currentSuperSlots > 0) {
+        // Remove one supervisor slot
+        const idx = dayBookings.lastIndexOf(14);
+        const newDayBookings = [...dayBookings.slice(0, idx), ...dayBookings.slice(idx + 1)];
+        const newBookings = { ...bookings, [key]: newDayBookings };
+        setBookings(newBookings);
+        await saveBookings(newBookings);
+        showToast("Entrada do supervisor removida.");
+      } else {
+        // Add supervisor slots (count selected)
+        const totalAfter = nonSuperCount + superCount;
+        if (totalAfter > MAX_PER_DAY) {
+          showToast(`Limite atingido! Só há ${MAX_PER_DAY - nonSuperCount} lugar(es) disponíveis.`, "error"); return;
+        }
+        const newDayBookings = [...dayBookings, ...Array(superCount).fill(14)];
+        const newBookings = { ...bookings, [key]: newDayBookings };
+        setBookings(newBookings);
+        await saveBookings(newBookings);
+        showToast(`${superCount} entrada(s) do supervisor adicionada(s)! 🏠`);
+      }
+      return;
+    }
+
+    // Regular user logic
+    const isBooked = dayBookings.includes(currentUser.id);
+
+    if (!currentUser.isSuper && isTooFarAhead(day)) {
+      showToast(`Só podes reservar até ${MAX_DAYS_AHEAD} dias à frente.`, "error"); return;
+    }
 
     let newBookings: Record<string, number[]>;
     if (isBooked) {
@@ -140,6 +193,7 @@ export default function HomeOfficeApp() {
       color: "#e8e8f0",
       padding: "0",
     }}>
+      {/* Header */}
       <div style={{
         background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
         borderBottom: "1px solid #ffffff10",
@@ -159,17 +213,31 @@ export default function HomeOfficeApp() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {TEAM.map(u => (
-            <button key={u.id} onClick={() => setCurrentUser(u)} style={{
+            <button key={u.id} onClick={() => {
+              if (u.isSuper) {
+                const pw = window.prompt("Introduza a password de Supervisor:");
+                if (pw === SUPER_PASSWORD) {
+                  setCurrentUser(u);
+                } else if (pw !== null) {
+                  showToast("Password incorreta!", "error");
+                }
+                // If pw is null (cancelled) or wrong, we do nothing (stays on current user)
+              } else {
+                setCurrentUser(u);
+              }
+            }} style={{
               width: 38, height: 38, borderRadius: "50%",
               background: currentUser.id === u.id ? u.color : "#ffffff15",
               border: currentUser.id === u.id ? `2px solid ${u.color}` : "2px solid transparent",
-              color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", transition: "all 0.2s",
+              color: u.isSuper ? "#000" : "#fff", fontWeight: 700, fontSize: 12,
+              cursor: "pointer", transition: "all 0.2s",
               boxShadow: currentUser.id === u.id ? `0 0 12px ${u.color}60` : "none", outline: "none",
             }} title={u.name}>{u.avatar}</button>
           ))}
         </div>
       </div>
 
+      {/* Current user bar */}
       <div style={{
         background: `linear-gradient(90deg, ${currentUser.color}20, transparent)`,
         borderBottom: "1px solid #ffffff08",
@@ -181,46 +249,71 @@ export default function HomeOfficeApp() {
             width: 32, height: 32, borderRadius: "50%",
             background: currentUser.color, display: "flex", alignItems: "center",
             justifyContent: "center", fontWeight: 700, fontSize: 12,
+            color: currentUser.isSuper ? "#000" : "#fff",
           }}>{currentUser.avatar}</div>
           <span style={{ fontWeight: 600 }}>{currentUser.name}</span>
           <span style={{ color: "#6b7280", fontSize: 13 }}>— a gerir como</span>
+          {currentUser.isSuper && (
+            <span style={{ fontSize: 11, background: "#ffffff20", borderRadius: 6, padding: "2px 8px", color: "#fff" }}>⭐ Supervisor</span>
+          )}
         </div>
-        <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: currentUser.color }}>{remaining}</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>dias restantes</div>
+
+        {/* Supervisor entry count selector */}
+        {currentUser.isSuper ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, color: "#9ca3af" }}>Entradas por dia:</span>
+            {[1, 2, 3, 4, 5].map(n => (
+              <button key={n} onClick={() => setSuperCount(n)} style={{
+                width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer",
+                background: superCount === n ? currentUser.color : "#ffffff15",
+                color: superCount === n ? "#000" : "#fff",
+                fontWeight: 700, fontSize: 13,
+              }}>{n}</button>
+            ))}
           </div>
-          <div style={{ width: 1, height: 32, background: "#ffffff10" }} />
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{usedBalance}</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>usados</div>
+        ) : (
+          <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: currentUser.color }}>{remaining}</div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>dias restantes</div>
+            </div>
+            <div style={{ width: 1, height: 32, background: "#ffffff10" }} />
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>{usedBalance}</div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>usados</div>
+            </div>
+            <div style={{ width: 1, height: 32, background: "#ffffff10" }} />
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#6b7280" }}>{MONTHLY_BALANCE}</div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>total/mês</div>
+            </div>
           </div>
-          <div style={{ width: 1, height: 32, background: "#ffffff10" }} />
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#6b7280" }}>{MONTHLY_BALANCE}</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>total/mês</div>
-          </div>
-        </div>
+        )}
       </div>
 
-      <div style={{ padding: "0 24px", marginTop: 0, background: "#0f0f13" }}>
-        <div style={{ height: 4, background: "#ffffff10", borderRadius: 4, overflow: "hidden" }}>
-          <div style={{
-            height: "100%", width: `${(usedBalance / MONTHLY_BALANCE) * 100}%`,
-            background: remaining <= 2
-              ? "linear-gradient(90deg, #ef4444, #f87171)"
-              : `linear-gradient(90deg, ${currentUser.color}, ${currentUser.color}99)`,
-            borderRadius: 4, transition: "all 0.4s ease",
-          }} />
+      {/* Balance bar (hidden for supervisor) */}
+      {!currentUser.isSuper && (
+        <div style={{ padding: "0 24px", background: "#0f0f13" }}>
+          <div style={{ height: 4, background: "#ffffff10", borderRadius: 4, overflow: "hidden" }}>
+            <div style={{
+              height: "100%", width: `${(usedBalance / MONTHLY_BALANCE) * 100}%`,
+              background: remaining <= 2
+                ? "linear-gradient(90deg, #ef4444, #f87171)"
+                : `linear-gradient(90deg, ${currentUser.color}, ${currentUser.color}99)`,
+              borderRadius: 4, transition: "all 0.4s ease",
+            }} />
+          </div>
         </div>
-      </div>
+      )}
 
+      {/* View toggle */}
       <div style={{ padding: "16px 24px 0", display: "flex", gap: 8 }}>
         {["calendar", "team"].map(v => (
           <button key={v} onClick={() => setView(v)} style={{
             padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
             background: view === v ? currentUser.color : "#ffffff10",
-            color: "#fff", fontWeight: 600, fontSize: 13, transition: "all 0.2s",
+            color: view === v && currentUser.isSuper ? "#000" : "#fff",
+            fontWeight: 600, fontSize: 13, transition: "all 0.2s",
           }}>
             {v === "calendar" ? "📅 Calendário" : "👥 Equipa"}
           </button>
@@ -229,6 +322,7 @@ export default function HomeOfficeApp() {
 
       {view === "calendar" ? (
         <div style={{ padding: "16px 24px 32px" }}>
+          {/* Month nav */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <button onClick={prevMonth} style={{
               background: "#ffffff10", border: "none", color: "#fff",
@@ -241,12 +335,14 @@ export default function HomeOfficeApp() {
             }}>›</button>
           </div>
 
+          {/* Days header */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
             {DAYS_PT.map(d => (
               <div key={d} style={{ textAlign: "center", fontSize: 11, color: "#6b7280", fontWeight: 600, padding: "4px 0" }}>{d}</div>
             ))}
           </div>
 
+          {/* Calendar grid */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
             {calendarDays.map((day, i) => {
               if (!day) return <div key={`empty-${i}`} />;
@@ -256,16 +352,21 @@ export default function HomeOfficeApp() {
               const isPast = dateObj < new Date(today.getFullYear(), today.getMonth(), today.getDate());
               const isToday = day === today.getDate() && viewMonth === currentMonth && viewYear === currentYear;
               const dayUsers = getDayBookings(day);
-              const isBookedByMe = dayUsers.includes(currentUser.id);
-              const isFull = dayUsers.length >= MAX_PER_DAY && !isBookedByMe;
+              const isBookedByMe = currentUser.isSuper
+                ? dayUsers.includes(14)
+                : dayUsers.includes(currentUser.id);
+              const totalSlots = dayUsers.length;
+              const isFull = totalSlots >= MAX_PER_DAY && !isBookedByMe;
+              const tooFar = !currentUser.isSuper && isTooFarAhead(day);
+              const isDisabled = isWeekend || isPast || tooFar;
 
               return (
-                <div key={day} onClick={() => !isWeekend && toggleBooking(day)} style={{
+                <div key={day} onClick={() => !isDisabled && toggleBooking(day)} style={{
                   minHeight: 72, borderRadius: 10, padding: "8px 6px",
                   background: isBookedByMe ? `${currentUser.color}25` : isToday ? "#ffffff08" : isWeekend ? "transparent" : "#ffffff05",
                   border: isBookedByMe ? `1.5px solid ${currentUser.color}60` : isToday ? "1.5px solid #ffffff20" : "1.5px solid transparent",
-                  cursor: isWeekend || isPast ? "default" : "pointer",
-                  opacity: isWeekend || isPast ? 0.35 : 1,
+                  cursor: isDisabled ? "default" : "pointer",
+                  opacity: isDisabled ? 0.35 : 1,
                   transition: "all 0.15s", position: "relative",
                 }}>
                   <div style={{
@@ -274,23 +375,44 @@ export default function HomeOfficeApp() {
                     marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between",
                   }}>
                     {day}
-                    {isFull && !isBookedByMe && (
+                    {isFull && (
                       <span style={{ fontSize: 9, background: "#ef444420", color: "#ef4444", borderRadius: 4, padding: "1px 4px" }}>FULL</span>
                     )}
                   </div>
+
+                  {/* Avatar dots — deduplicated for display, show count for supervisor */}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                    {dayUsers.map(uid => {
-                      const u = TEAM.find(t => t.id === uid);
-                      return u ? (
-                        <div key={uid} title={u.name} style={{
-                          width: 18, height: 18, borderRadius: "50%",
-                          background: u.color, display: "flex", alignItems: "center",
-                          justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff",
-                          border: uid === currentUser.id ? "1.5px solid #fff" : "none",
-                        }}>{u.avatar[0]}</div>
-                      ) : null;
-                    })}
+                    {(() => {
+                      const superSlots = dayUsers.filter(id => id === 14).length;
+                      const regularIds = [...new Set(dayUsers.filter(id => id !== 14))];
+                      return (
+                        <>
+                          {regularIds.map(uid => {
+                            const u = TEAM.find(t => t.id === uid);
+                            return u ? (
+                              <div key={uid} title={u.name} style={{
+                                width: 18, height: 18, borderRadius: "50%",
+                                background: u.color, display: "flex", alignItems: "center",
+                                justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff",
+                                border: uid === currentUser.id ? "1.5px solid #fff" : "none",
+                              }}>{u.avatar[0]}</div>
+                            ) : null;
+                          })}
+                          {superSlots > 0 && (
+                            <div title={`Supervisor ×${superSlots}`} style={{
+                              height: 18, borderRadius: 9, padding: "0 5px",
+                              background: "#ffffff", display: "flex", alignItems: "center",
+                              justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#000",
+                              border: currentUser.isSuper ? "1.5px solid #fff" : "none",
+                              gap: 2,
+                            }}>SV{superSlots > 1 ? ` ×${superSlots}` : ""}</div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
+
+                  {/* Capacity bar */}
                   {dayUsers.length > 0 && (
                     <div style={{ position: "absolute", bottom: 5, left: 6, right: 6 }}>
                       <div style={{ height: 2, background: "#ffffff10", borderRadius: 2 }}>
@@ -308,6 +430,7 @@ export default function HomeOfficeApp() {
             })}
           </div>
 
+          {/* Legend */}
           <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b7280" }}>
               <div style={{ width: 12, height: 12, borderRadius: 3, background: `${currentUser.color}40`, border: `1.5px solid ${currentUser.color}` }} />
@@ -321,6 +444,12 @@ export default function HomeOfficeApp() {
               <div style={{ width: 12, height: 2, background: "#ef4444", borderRadius: 2 }} />
               Dia cheio
             </div>
+            {!currentUser.isSuper && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b7280" }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: "#ffffff30", border: "1px solid #ffffff50" }} />
+                Fora do limite de 30 dias
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -329,7 +458,7 @@ export default function HomeOfficeApp() {
             Saldos da Equipa — {MONTHS_PT[viewMonth]} {viewYear}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {TEAM.map(u => {
+            {TEAM.filter(u => !u.isSuper).map(u => {
               const used = Object.entries(bookings).filter(([key, users]) => {
                 const [y, m] = key.split("-");
                 return parseInt(y) === viewYear && parseInt(m) === viewMonth + 1 && users.includes(u.id);
@@ -370,12 +499,15 @@ export default function HomeOfficeApp() {
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, color: "#9ca3af" }}>Hoje em HO</div>
             {(() => {
               const todayKey = getKey(currentYear, currentMonth, today.getDate());
-              const todayUsers = (bookings[todayKey] || []).map((id: number) => TEAM.find(u => u.id === id)).filter(Boolean) as typeof TEAM;
-              return todayUsers.length === 0 ? (
+              const todayUserIds = bookings[todayKey] || [];
+              const superCount = todayUserIds.filter(id => id === 14).length;
+              const regularUsers = [...new Set(todayUserIds.filter(id => id !== 14))]
+                .map(id => TEAM.find(u => u.id === id)).filter(Boolean) as typeof TEAM;
+              return regularUsers.length === 0 && superCount === 0 ? (
                 <div style={{ color: "#4b5563", fontSize: 14, fontStyle: "italic" }}>Ninguém em HO hoje.</div>
               ) : (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  {todayUsers.map(u => (
+                  {regularUsers.map(u => (
                     <div key={u.id} style={{
                       display: "flex", alignItems: "center", gap: 8,
                       background: `${u.color}15`, border: `1px solid ${u.color}40`,
@@ -389,6 +521,20 @@ export default function HomeOfficeApp() {
                       <span style={{ fontSize: 13, fontWeight: 600 }}>{u.name}</span>
                     </div>
                   ))}
+                  {superCount > 0 && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      background: "#ffffff15", border: "1px solid #ffffff40",
+                      borderRadius: 8, padding: "8px 12px",
+                    }}>
+                      <div style={{
+                        width: 28, height: 28, borderRadius: "50%",
+                        background: "#ffffff", display: "flex", alignItems: "center",
+                        justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#000",
+                      }}>SV</div>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>Supervisor ×{superCount}</span>
+                    </div>
+                  )}
                 </div>
               );
             })()}
