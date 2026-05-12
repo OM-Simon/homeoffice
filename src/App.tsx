@@ -24,6 +24,7 @@ const MONTHLY_BALANCE = 7;
 const MAX_PER_DAY = 5;
 const MAX_DAYS_AHEAD = 30;
 const FERIAS_ID = -99;
+const BAIXA_ID  = -98;
 
 const today = new Date();
 const currentYear = today.getFullYear();
@@ -47,7 +48,8 @@ export default function HomeOfficeApp() {
   const [view, setView] = useState("calendar");
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
   const [selectedUserForAdmin, setSelectedUserForAdmin] = useState(TEAM[0]);
-  const [feriasCont, setFeriasCont] = useState<number | null>(null); // FIX: moved inside component
+  const [feriasCont, setFeriasCont] = useState<number | null>(null);
+  const [baixaCont,  setBaixaCont]  = useState<number | null>(null);
 
   useEffect(() => {
     const ref = doc(db, "bookings", "all");
@@ -117,11 +119,7 @@ export default function HomeOfficeApp() {
           await saveBookings(newBookings);
           showToast("Férias removidas deste dia.");
         } else {
-          const totalAfter = dayBookings.length + feriasCont;
-          if (totalAfter > MAX_PER_DAY) {
-            showToast(`Limite atingido! Só há ${MAX_PER_DAY - dayBookings.length} lugar(es) disponíveis.`, "error");
-            return;
-          }
+          // No MAX_PER_DAY cap for supervisor
           const newDayBookings = [...dayBookings, ...Array(feriasCont).fill(FERIAS_ID)];
           const newBookings = { ...bookings, [key]: newDayBookings };
           setBookings(newBookings);
@@ -131,7 +129,27 @@ export default function HomeOfficeApp() {
         return;
       }
 
-      // NORMAL HO MODE (assign/remove for selected user)
+      // BAIXA MODE
+      if (baixaCont !== null) {
+        const currentBaixaOnDay = dayBookings.filter(id => id === BAIXA_ID).length;
+        if (currentBaixaOnDay > 0) {
+          const newDayBookings = dayBookings.filter(id => id !== BAIXA_ID);
+          const newBookings = { ...bookings, [key]: newDayBookings };
+          setBookings(newBookings);
+          await saveBookings(newBookings);
+          showToast("Baixa removida deste dia.");
+        } else {
+          // No MAX_PER_DAY cap for supervisor
+          const newDayBookings = [...dayBookings, ...Array(baixaCont).fill(BAIXA_ID)];
+          const newBookings = { ...bookings, [key]: newDayBookings };
+          setBookings(newBookings);
+          await saveBookings(newBookings);
+          showToast(`${baixaCont} dia(s) de baixa adicionado(s). 🤒`);
+        }
+        return;
+      }
+
+      // NORMAL HO MODE (assign/remove for selected user) — no MAX_PER_DAY cap for supervisor
       const targetId = selectedUserForAdmin.id;
       const existingIndex = dayBookings.findIndex(id => Math.abs(id) === targetId);
       if (existingIndex > -1) {
@@ -141,7 +159,6 @@ export default function HomeOfficeApp() {
         await saveBookings(newBookings);
         showToast(`Removido: ${selectedUserForAdmin.name}`);
       } else {
-        if (dayBookings.length >= MAX_PER_DAY) { showToast("Limite atingido!", "error"); return; }
         const newBookings = { ...bookings, [key]: [...dayBookings, -targetId] };
         setBookings(newBookings);
         await saveBookings(newBookings);
@@ -304,10 +321,14 @@ export default function HomeOfficeApp() {
               <span style={{ fontSize: 13, color: "#9ca3af" }}>Atribuir HO para:</span>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                 {TEAM.filter(u => !u.isSuper).map(u => (
-                  <button key={u.id} onClick={() => { setSelectedUserForAdmin(u); setFeriasCont(null); }} style={{
+                  <button key={u.id} onClick={() => {
+                    setSelectedUserForAdmin(u);
+                    setFeriasCont(null);
+                    setBaixaCont(null);
+                  }} style={{
                     padding: "4px 8px", borderRadius: 6, border: "none", cursor: "pointer",
-                    background: selectedUserForAdmin.id === u.id && feriasCont === null ? u.color : "#ffffff15",
-                    color: selectedUserForAdmin.id === u.id && feriasCont === null ? "#000" : "#fff",
+                    background: selectedUserForAdmin.id === u.id && feriasCont === null && baixaCont === null ? u.color : "#ffffff15",
+                    color: selectedUserForAdmin.id === u.id && feriasCont === null && baixaCont === null ? "#000" : "#fff",
                     fontSize: 11, fontWeight: 700, transition: "0.2s",
                   }}>{u.avatar}</button>
                 ))}
@@ -318,10 +339,29 @@ export default function HomeOfficeApp() {
             <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid #ffffff15", paddingLeft: 16 }}>
               <span style={{ fontSize: 13, color: "#9ca3af" }}>🏖️ Férias:</span>
               {[1, 2, 3, 4, 5].map(n => (
-                <button key={n} onClick={() => setFeriasCont(feriasCont === n ? null : n)} style={{
+                <button key={n} onClick={() => {
+                  setFeriasCont(feriasCont === n ? null : n);
+                  setBaixaCont(null);
+                }} style={{
                   width: 30, height: 30, borderRadius: 8, border: "none", cursor: "pointer",
                   background: feriasCont === n ? "#f59e0b" : "#ffffff15",
                   color: feriasCont === n ? "#000" : "#fff",
+                  fontWeight: 700, fontSize: 13,
+                }}>{n}</button>
+              ))}
+            </div>
+
+            {/* Baixa selector */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid #ffffff15", paddingLeft: 16 }}>
+              <span style={{ fontSize: 13, color: "#9ca3af" }}>🤒 Baixa:</span>
+              {[1, 2, 3, 4, 5].map(n => (
+                <button key={n} onClick={() => {
+                  setBaixaCont(baixaCont === n ? null : n);
+                  setFeriasCont(null);
+                }} style={{
+                  width: 30, height: 30, borderRadius: 8, border: "none", cursor: "pointer",
+                  background: baixaCont === n ? "#ef4444" : "#ffffff15",
+                  color: "#fff",
                   fontWeight: 700, fontSize: 13,
                 }}>{n}</button>
               ))}
@@ -431,14 +471,16 @@ export default function HomeOfficeApp() {
                     marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between",
                   }}>
                     {day}
-                    {isFull && <span style={{ fontSize: 9, background: "#ef444420", color: "#ef4444", borderRadius: 4, padding: "1px 4px" }}>FULL</span>}
+                    {/* Only show FULL badge for non-supervisor users */}
+                    {isFull && !currentUser.isSuper && <span style={{ fontSize: 9, background: "#ef444420", color: "#ef4444", borderRadius: 4, padding: "1px 4px" }}>FULL</span>}
                   </div>
 
                   {/* Avatar dots */}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
                     {(() => {
                       const feriasCount = dayUsers.filter(id => id === FERIAS_ID).length;
-                      const regularEntries = dayUsers.filter(id => id !== FERIAS_ID);
+                      const baixaCount  = dayUsers.filter(id => id === BAIXA_ID).length;
+                      const regularEntries = dayUsers.filter(id => id !== FERIAS_ID && id !== BAIXA_ID);
                       // Deduplicate by absolute ID for display
                       const seenIds = new Set<number>();
                       const uniqueEntries = regularEntries.filter(uid => {
@@ -473,6 +515,13 @@ export default function HomeOfficeApp() {
                               justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#000", gap: 2,
                             }}>🏖️{feriasCount > 1 ? ` ×${feriasCount}` : ""}</div>
                           )}
+                          {baixaCount > 0 && (
+                            <div title={`Baixa ×${baixaCount}`} style={{
+                              height: 18, borderRadius: 9, padding: "0 5px",
+                              background: "#ef4444", display: "flex", alignItems: "center",
+                              justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff", gap: 2,
+                            }}>🤒{baixaCount > 1 ? ` ×${baixaCount}` : ""}</div>
+                          )}
                         </>
                       );
                     })()}
@@ -484,7 +533,7 @@ export default function HomeOfficeApp() {
                       <div style={{ height: 2, background: "#ffffff10", borderRadius: 2 }}>
                         <div style={{
                           height: "100%",
-                          width: `${(dayUsers.length / MAX_PER_DAY) * 100}%`,
+                          width: `${Math.min((dayUsers.length / MAX_PER_DAY) * 100, 100)}%`,
                           background: dayUsers.length >= MAX_PER_DAY ? "#ef4444" : "#10b981",
                           borderRadius: 2,
                         }} />
@@ -513,6 +562,9 @@ export default function HomeOfficeApp() {
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b7280" }}>
               <span>🏖️</span> Férias
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b7280" }}>
+              <span>🤒</span> Baixa
+            </div>
             {!currentUser.isSuper && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b7280" }}>
                 <div style={{ width: 12, height: 12, borderRadius: 3, background: "#ffffff30", border: "1px solid #ffffff50" }} />
@@ -522,7 +574,7 @@ export default function HomeOfficeApp() {
           </div>
         </div>
       ) : (
-        /* TEAM VIEW — FIX: correctly counts both positive and negative IDs */
+        /* TEAM VIEW */
         <div style={{ padding: "16px 24px 32px" }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: "#9ca3af" }}>
             Saldos da Equipa — {MONTHS_PT[viewMonth]} {viewYear}
@@ -572,9 +624,10 @@ export default function HomeOfficeApp() {
               const todayKey = getKey(currentYear, currentMonth, today.getDate());
               const todayUserIds = bookings[todayKey] || [];
               const feriasToday = todayUserIds.filter(id => id === FERIAS_ID).length;
+              const baixaToday  = todayUserIds.filter(id => id === BAIXA_ID).length;
               const seenIds = new Set<number>();
               const regularUsers = todayUserIds
-                .filter(id => id !== FERIAS_ID)
+                .filter(id => id !== FERIAS_ID && id !== BAIXA_ID)
                 .filter(uid => {
                   const absId = Math.abs(uid);
                   if (seenIds.has(absId)) return false;
@@ -584,7 +637,7 @@ export default function HomeOfficeApp() {
                 .map(id => TEAM.find(u => u.id === Math.abs(id)))
                 .filter(Boolean) as typeof TEAM;
 
-              return regularUsers.length === 0 && feriasToday === 0 ? (
+              return regularUsers.length === 0 && feriasToday === 0 && baixaToday === 0 ? (
                 <div style={{ color: "#4b5563", fontSize: 14, fontStyle: "italic" }}>Ninguém em HO hoje.</div>
               ) : (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -609,6 +662,16 @@ export default function HomeOfficeApp() {
                     }}>
                       <span style={{ fontSize: 18 }}>🏖️</span>
                       <span style={{ fontSize: 13, fontWeight: 600 }}>Férias ×{feriasToday}</span>
+                    </div>
+                  )}
+                  {baixaToday > 0 && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      background: "#ef444420", border: "1px solid #ef444440",
+                      borderRadius: 8, padding: "8px 12px",
+                    }}>
+                      <span style={{ fontSize: 18 }}>🤒</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>Baixa ×{baixaToday}</span>
                     </div>
                   )}
                 </div>
