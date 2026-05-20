@@ -19,26 +19,24 @@ const TEAM = [
   { id: 14, name: "Supervisor",         avatar: "SV",  color: "#ffffff", isSuper: true  },
 ];
 
-// User passwords — change these as needed
 const USER_PASSWORDS: Record<number, string> = {
-  1:  "3j7F9V", //Beatriz
-  2:  "a8W8W3", //Claudia
-  3:  "78x2JS", //Elisabete
-  4:  "9v9p0E", //Eva
-  5:  "N0Yl13", //João Santos
-  6:  "O4l0r1", //João Silva
-  7:  "96g6Kw", //Liane
-  8:  "IY889g", //Luis
-  9:  "45Fx8I", //Miguel
-  10: "64J2kJ", //Nuno
-  11: "6Q48Hx", //Ricardo Anderson
-  12: "Yoy096", //Ricardo Coelho
-  13: "1Z8tk8", //Rui
-  14: "Telma_OM92", // Supervisor password
+  1:  "3j7F9V",
+  2:  "a8W8W3",
+  3:  "78x2JS",
+  4:  "9v9p0E",
+  5:  "N0Yl13",
+  6:  "O4l0r1",
+  7:  "96g6Kw",
+  8:  "IY889g",
+  9:  "45Fx8I",
+  10: "64J2kJ",
+  11: "6Q48Hx",
+  12: "Yoy096",
+  13: "1Z8tk8",
+  14: "Telma_OM92",
 };
 
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes — change this value to adjust
-
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const MONTHLY_BALANCE = 7;
 const MAX_PER_DAY = 5;
 const MAX_DAYS_AHEAD = 30;
@@ -70,7 +68,11 @@ type AuditEntry = {
 };
 
 // ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
-function LoginPage({ onLogin, idleLoggedOut }: { onLogin: (user: typeof TEAM[0]) => void; idleLoggedOut?: boolean }) {
+function LoginPage({ onLogin, onVisitor, idleLoggedOut }: {
+  onLogin: (user: typeof TEAM[0]) => void;
+  onVisitor: () => void;
+  idleLoggedOut?: boolean;
+}) {
   const [selected, setSelected] = useState<typeof TEAM[0] | null>(null);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -111,7 +113,6 @@ function LoginPage({ onLogin, idleLoggedOut }: { onLogin: (user: typeof TEAM[0])
       position: "relative",
       overflow: "hidden",
     }}>
-      {/* Background decorative blobs */}
       <div style={{
         position: "absolute", top: -120, left: -120, width: 400, height: 400,
         borderRadius: "50%",
@@ -126,7 +127,7 @@ function LoginPage({ onLogin, idleLoggedOut }: { onLogin: (user: typeof TEAM[0])
       }} />
 
       {/* Logo */}
-      <div style={{ textAlign: "center", marginBottom: 40 }}>
+      <div style={{ textAlign: "center", marginBottom: 32 }}>
         <div style={{
           width: 64, height: 64, borderRadius: 18,
           background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
@@ -156,6 +157,35 @@ function LoginPage({ onLogin, idleLoggedOut }: { onLogin: (user: typeof TEAM[0])
           ⏱️ Sessão terminada por inatividade. Faz login novamente.
         </div>
       )}
+
+      {/* Visitor button */}
+      <button onClick={onVisitor} style={{
+        marginBottom: 24,
+        padding: "10px 24px",
+        borderRadius: 10,
+        border: "1.5px solid #ffffff15",
+        background: "#ffffff08",
+        color: "#9ca3af",
+        fontWeight: 600,
+        fontSize: 13,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        transition: "all 0.2s",
+      }}>
+        <span style={{ fontSize: 16 }}>👁️</span>
+        Entrar como Visitante
+        <span style={{
+          fontSize: 10,
+          background: "#ffffff10",
+          borderRadius: 4,
+          padding: "2px 6px",
+          color: "#6b7280",
+        }}>só leitura</span>
+      </button>
+
+      {/* User grid */}
       <div style={{
         display: "grid",
         gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
@@ -281,7 +311,7 @@ function LoginPage({ onLogin, idleLoggedOut }: { onLogin: (user: typeof TEAM[0])
 
 // ─── CANCEL CONFIRMATION DIALOG ───────────────────────────────────────────────
 function CancelDialog({
-  day, month, year, onConfirm, onCancel, color,
+  day, month, year, onConfirm, onCancel,
 }: {
   day: number; month: number; year: number;
   onConfirm: () => void; onCancel: () => void;
@@ -299,7 +329,7 @@ function CancelDialog({
     }}>
       <div style={{
         background: "#16161f",
-        border: `1px solid #ffffff15`,
+        border: "1px solid #ffffff15",
         borderRadius: 16,
         padding: "28px 28px 24px",
         maxWidth: 360,
@@ -357,18 +387,15 @@ function HistoryView({
   auditFilter: "all" | number;
   setAuditFilter: (v: "all" | number) => void;
 }) {
-  // Default selected date = today in YYYY-MM-DD
   const todayStr = today.toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
 
-  // Get all unique booking dates that have audit entries, for the "has entries" indicator
   const datesWithEntries = useMemo(() => {
     const s = new Set<string>();
     auditLog.forEach(e => s.add(e.targetDate));
     return s;
   }, [auditLog]);
 
-  // Filter by selected booking date (targetDate) and optional user filter
   const filtered = useMemo(() => {
     return auditLog.filter(e => {
       if (e.targetDate !== selectedDate) return false;
@@ -383,17 +410,11 @@ function HistoryView({
   const formatTimestamp = (d: Date) =>
     d.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
-  const formatTargetDate = (s: string) => {
-    const [y, m, day] = s.split("-");
-    return `${day}/${m}/${y}`;
-  };
-
   const formatSelectedDate = (s: string) => {
     const [y, m, d] = s.split("-");
     return `${d}/${m}/${y}`;
   };
 
-  // Navigate dates
   const shiftDate = (delta: number) => {
     const d = new Date(selectedDate + "T12:00:00");
     d.setDate(d.getDate() + delta);
@@ -402,14 +423,10 @@ function HistoryView({
 
   return (
     <div style={{ padding: "16px 24px 32px" }}>
-
-      {/* Header row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
         <div style={{ fontWeight: 700, fontSize: 15, color: "#9ca3af" }}>
           Histórico de alterações
         </div>
-
-        {/* User filter */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ fontSize: 12, color: "#6b7280" }}>Utilizador:</span>
           <button onClick={() => setAuditFilter("all")} style={{
@@ -426,7 +443,6 @@ function HistoryView({
         </div>
       </div>
 
-      {/* Date picker row */}
       <div style={{
         display: "flex", alignItems: "center", gap: 12, marginBottom: 20,
         background: "#ffffff06", border: "1px solid #ffffff0f",
@@ -436,7 +452,6 @@ function HistoryView({
           background: "#ffffff10", border: "none", color: "#fff",
           width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 16, flexShrink: 0,
         }}>‹</button>
-
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <input
             type="date"
@@ -462,17 +477,12 @@ function HistoryView({
             }
           </div>
         </div>
-
-        <button
-          onClick={() => shiftDate(1)}
-          style={{
-            background: "#ffffff10", border: "none", color: "#fff",
-            width: 32, height: 32, borderRadius: 8,
-            cursor: "pointer", fontSize: 16, flexShrink: 0,
-          }}>›</button>
+        <button onClick={() => shiftDate(1)} style={{
+          background: "#ffffff10", border: "none", color: "#fff",
+          width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 16, flexShrink: 0,
+        }}>›</button>
       </div>
 
-      {/* Results */}
       {filtered.length === 0 ? (
         <div style={{ color: "#4b5563", fontSize: 14, fontStyle: "italic", textAlign: "center", marginTop: 40 }}>
           Nenhuma alteração registada para este dia.
@@ -495,7 +505,6 @@ function HistoryView({
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 10, fontWeight: 700, color: "#fff",
                 }}>{actor?.avatar ?? "?"}</div>
-
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <span>{entry.userName}</span>
@@ -507,10 +516,8 @@ function HistoryView({
                       <span style={{ fontSize: 11, color: "#9ca3af" }}>→ {entry.targetUserName}</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    <span>
-                      Alteração feita em: <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTimestamp(entry.timestamp)}</span>
-                    </span>
+                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>
+                    Alteração feita em: <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTimestamp(entry.timestamp)}</span>
                   </div>
                 </div>
               </div>
@@ -525,6 +532,7 @@ function HistoryView({
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function HomeOfficeApp() {
   const [loggedInUser, setLoggedInUser] = useState<typeof TEAM[0] | null>(null);
+  const [isVisitor, setIsVisitor] = useState(false);
   const [currentUser, setCurrentUser] = useState(TEAM[0]);
   const [viewMonth, setViewMonth] = useState(currentMonth);
   const [viewYear, setViewYear] = useState(currentYear);
@@ -534,13 +542,49 @@ export default function HomeOfficeApp() {
   const [selectedUserForAdmin, setSelectedUserForAdmin] = useState(TEAM[0]);
   const [feriasCont, setFeriasCont] = useState<number | null>(null);
   const [baixaCont,  setBaixaCont]  = useState<number | null>(null);
-  // Cancel confirmation dialog state
   const [cancelDialog, setCancelDialog] = useState<{ day: number } | null>(null);
-
-  // Audit log
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [auditFilter, setAuditFilter] = useState<"all" | number>("all");
+  const [idleLoggedOut, setIdleLoggedOut] = useState(false);
 
+  const handleLogin = (user: typeof TEAM[0]) => {
+    setLoggedInUser(user);
+    setCurrentUser(user);
+    setIsVisitor(false);
+  };
+
+  const handleVisitor = () => {
+    setIsVisitor(true);
+    setLoggedInUser(null);
+  };
+
+  const handleLogout = () => {
+    setLoggedInUser(null);
+    setIsVisitor(false);
+  };
+
+  // Idle timeout — regular users only
+  useEffect(() => {
+    if (!loggedInUser || loggedInUser.isSuper) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setLoggedInUser(null);
+        setIsVisitor(false);
+        setIdleLoggedOut(true);
+      }, IDLE_TIMEOUT_MS);
+    };
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
+    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
+    resetTimer();
+    return () => {
+      clearTimeout(timer);
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+    };
+  }, [loggedInUser]);
+
+  // Audit log — supervisor only
   useEffect(() => {
     if (!loggedInUser?.isSuper) return;
     const q = query(collection(db, "auditLog"), orderBy("timestamp", "desc"));
@@ -548,7 +592,6 @@ export default function HomeOfficeApp() {
       const entries: AuditEntry[] = snap.docs
         .map(d => {
           const data = d.data();
-          // serverTimestamp() is null on the first local write — fall back to clientDate
           const ts = data.timestamp?.toDate()
             ?? (data.clientDate ? new Date(data.clientDate) : null);
           if (!ts) return null;
@@ -560,46 +603,7 @@ export default function HomeOfficeApp() {
     return () => unsub();
   }, [loggedInUser]);
 
-  const [idleLoggedOut, setIdleLoggedOut] = useState(false);
-
-  // Once logged in, set currentUser
-  const handleLogin = (user: typeof TEAM[0]) => {
-    setLoggedInUser(user);
-    setCurrentUser(user);
-  };
-
-  const handleLogout = (reason?: "idle") => {
-    setLoggedInUser(null);
-    if (reason === "idle") {
-      setIdleLoggedOut(true);
-    }
-  };
-
-  // ── Idle timeout: logout after IDLE_TIMEOUT_MS of inactivity ──────────────
-  useEffect(() => {
-    if (!loggedInUser || loggedInUser.isSuper) return;
-
-    let timer: ReturnType<typeof setTimeout>;
-
-    const resetTimer = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        setLoggedInUser(null);
-        setIdleLoggedOut(true);
-      }, IDLE_TIMEOUT_MS);
-    };
-
-    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
-    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
-    resetTimer();
-
-    return () => {
-      clearTimeout(timer);
-      events.forEach(e => window.removeEventListener(e, resetTimer));
-    };
-  }, [loggedInUser]);
-  // ──────────────────────────────────────────────────────────────────────────
-
+  // Bookings — always loaded
   useEffect(() => {
     const ref = doc(db, "bookings", "all");
     const unsub = onSnapshot(ref, (snap) => {
@@ -620,7 +624,6 @@ export default function HomeOfficeApp() {
     targetDate: string,
     targetUserName?: string,
   ) => {
-    // Store a clientDate string as backup in case serverTimestamp is null on first read
     const clientDate = new Date().toISOString();
     await addDoc(collection(db, "auditLog"), {
       userId: currentUser.id,
@@ -662,7 +665,6 @@ export default function HomeOfficeApp() {
     return dateObj > maxDate;
   };
 
-  // Perform the actual removal (called after confirmation)
   const performRemoveBooking = async (day: number) => {
     const key = getKey(viewYear, viewMonth, day);
     const dayBookings = [...(bookings[key] || [])];
@@ -674,6 +676,7 @@ export default function HomeOfficeApp() {
   };
 
   const toggleBooking = async (day: number) => {
+    if (isVisitor) return; // visitors cannot book
     const key = getKey(viewYear, viewMonth, day);
     const dayBookings = [...(bookings[key] || [])];
     const dateObj = new Date(viewYear, viewMonth, day);
@@ -684,7 +687,6 @@ export default function HomeOfficeApp() {
       return;
     }
 
-    // --- SUPERVISOR LOGIC ---
     if (currentUser.isSuper) {
       if (feriasCont !== null) {
         const currentFeriasOnDay = dayBookings.filter(id => id === FERIAS_ID).length;
@@ -705,7 +707,6 @@ export default function HomeOfficeApp() {
         }
         return;
       }
-
       if (baixaCont !== null) {
         const currentBaixaOnDay = dayBookings.filter(id => id === BAIXA_ID).length;
         if (currentBaixaOnDay > 0) {
@@ -725,7 +726,6 @@ export default function HomeOfficeApp() {
         }
         return;
       }
-
       const targetId = selectedUserForAdmin.id;
       const existingIndex = dayBookings.findIndex(id => Math.abs(id) === targetId);
       if (existingIndex > -1) {
@@ -745,7 +745,6 @@ export default function HomeOfficeApp() {
       return;
     }
 
-    // --- REGULAR USER LOGIC ---
     const isBookedByUser = dayBookings.includes(currentUser.id);
     const isBookedBySuper = dayBookings.includes(-currentUser.id);
 
@@ -753,13 +752,10 @@ export default function HomeOfficeApp() {
       showToast("Este dia foi marcado pelo Supervisor e não pode ser removido.", "error");
       return;
     }
-
     if (isBookedByUser) {
       setCancelDialog({ day });
       return;
     }
-
-    // Book the day
     if (isTooFarAhead(day)) { showToast(`Limite de ${MAX_DAYS_AHEAD} dias.`, "error"); return; }
     if (getUserBookingsThisMonth(currentUser.id) >= MONTHLY_BALANCE) { showToast("Saldo esgotado!", "error"); return; }
     if (dayBookings.length >= MAX_PER_DAY) { showToast("Dia cheio!", "error"); return; }
@@ -820,9 +816,15 @@ export default function HomeOfficeApp() {
   const usedBalance = getUserBookingsThisMonth(currentUser.id);
   const remaining = MONTHLY_BALANCE - usedBalance;
 
-  // Show login page if not logged in
-  if (!loggedInUser) {
-    return <LoginPage onLogin={(user) => { setIdleLoggedOut(false); handleLogin(user); }} idleLoggedOut={idleLoggedOut} />;
+  // Show login page if not logged in and not visitor
+  if (!loggedInUser && !isVisitor) {
+    return (
+      <LoginPage
+        onLogin={(user) => { setIdleLoggedOut(false); handleLogin(user); }}
+        onVisitor={handleVisitor}
+        idleLoggedOut={idleLoggedOut}
+      />
+    );
   }
 
   return (
@@ -832,7 +834,6 @@ export default function HomeOfficeApp() {
       fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
       color: "#e8e8f0",
     }}>
-      {/* Cancel confirmation dialog */}
       {cancelDialog && (
         <CancelDialog
           day={cancelDialog.day}
@@ -866,110 +867,106 @@ export default function HomeOfficeApp() {
             <div style={{ fontSize: 12, color: "#6b7280" }}>Gestão de trabalho remoto</div>
           </div>
         </div>
-
-        {/* Logout button */}
-        <button onClick={handleLogout} style={{
-          padding: "8px 16px", borderRadius: 8,
-          border: "1.5px solid #ffffff15", background: "transparent",
-          color: "#9ca3af", fontWeight: 600, fontSize: 13, cursor: "pointer",
-          transition: "all 0.2s",
-        }}>
-          ← Sair
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {isVisitor && (
+            <span style={{ fontSize: 12, background: "#ffffff10", borderRadius: 6, padding: "4px 10px", color: "#6b7280" }}>
+              👁️ Modo Visitante — só leitura
+            </span>
+          )}
+          <button onClick={handleLogout} style={{
+            padding: "8px 16px", borderRadius: 8,
+            border: "1.5px solid #ffffff15", background: "transparent",
+            color: "#9ca3af", fontWeight: 600, fontSize: 13, cursor: "pointer",
+          }}>
+            ← {isVisitor ? "Voltar" : "Sair"}
+          </button>
+        </div>
       </div>
 
-      {/* Current user bar */}
-      <div style={{
-        background: `linear-gradient(90deg, ${currentUser.color}20, transparent)`,
-        borderBottom: "1px solid #ffffff08",
-        padding: "12px 24px",
-        display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: "50%",
-            background: currentUser.color, display: "flex", alignItems: "center",
-            justifyContent: "center", fontWeight: 700, fontSize: 12,
-            color: currentUser.isSuper ? "#000" : "#fff",
-          }}>{currentUser.avatar}</div>
-          <span style={{ fontWeight: 600 }}>{currentUser.name}</span>
-          {currentUser.isSuper && (
-            <span style={{ fontSize: 11, background: "#ffffff20", borderRadius: 6, padding: "2px 8px", color: "#fff" }}>⭐ Supervisor</span>
-          )}
-        </div>
+      {/* Current user bar — hidden for visitor */}
+      {!isVisitor && (
+        <div style={{
+          background: `linear-gradient(90deg, ${currentUser.color}20, transparent)`,
+          borderBottom: "1px solid #ffffff08",
+          padding: "12px 24px",
+          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: "50%",
+              background: currentUser.color, display: "flex", alignItems: "center",
+              justifyContent: "center", fontWeight: 700, fontSize: 12,
+              color: currentUser.isSuper ? "#000" : "#fff",
+            }}>{currentUser.avatar}</div>
+            <span style={{ fontWeight: 600 }}>{currentUser.name}</span>
+            {currentUser.isSuper && (
+              <span style={{ fontSize: 11, background: "#ffffff20", borderRadius: 6, padding: "2px 8px", color: "#fff" }}>⭐ Supervisor</span>
+            )}
+          </div>
 
-        {currentUser.isSuper ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 13, color: "#9ca3af" }}>Atribuir HO para:</span>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {TEAM.filter(u => !u.isSuper).map(u => (
-                  <button key={u.id} onClick={() => {
-                    setSelectedUserForAdmin(u);
-                    setFeriasCont(null);
-                    setBaixaCont(null);
-                  }} style={{
-                    padding: "4px 8px", borderRadius: 6, border: "none", cursor: "pointer",
-                    background: selectedUserForAdmin.id === u.id && feriasCont === null && baixaCont === null ? u.color : "#ffffff15",
-                    color: selectedUserForAdmin.id === u.id && feriasCont === null && baixaCont === null ? "#000" : "#fff",
-                    fontSize: 11, fontWeight: 700, transition: "0.2s",
-                  }}>{u.avatar}</button>
+          {currentUser.isSuper ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, color: "#9ca3af" }}>Atribuir HO para:</span>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {TEAM.filter(u => !u.isSuper).map(u => (
+                    <button key={u.id} onClick={() => {
+                      setSelectedUserForAdmin(u);
+                      setFeriasCont(null);
+                      setBaixaCont(null);
+                    }} style={{
+                      padding: "4px 8px", borderRadius: 6, border: "none", cursor: "pointer",
+                      background: selectedUserForAdmin.id === u.id && feriasCont === null && baixaCont === null ? u.color : "#ffffff15",
+                      color: selectedUserForAdmin.id === u.id && feriasCont === null && baixaCont === null ? "#000" : "#fff",
+                      fontSize: 11, fontWeight: 700, transition: "0.2s",
+                    }}>{u.avatar}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid #ffffff15", paddingLeft: 16 }}>
+                <span style={{ fontSize: 13, color: "#9ca3af" }}>🏖️ Férias:</span>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <button key={n} onClick={() => { setFeriasCont(feriasCont === n ? null : n); setBaixaCont(null); }} style={{
+                    width: 30, height: 30, borderRadius: 8, border: "none", cursor: "pointer",
+                    background: feriasCont === n ? "#f59e0b" : "#ffffff15",
+                    color: feriasCont === n ? "#000" : "#fff", fontWeight: 700, fontSize: 13,
+                  }}>{n}</button>
+                ))}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid #ffffff15", paddingLeft: 16 }}>
+                <span style={{ fontSize: 13, color: "#9ca3af" }}>🤒 Baixa:</span>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <button key={n} onClick={() => { setBaixaCont(baixaCont === n ? null : n); setFeriasCont(null); }} style={{
+                    width: 30, height: 30, borderRadius: 8, border: "none", cursor: "pointer",
+                    background: baixaCont === n ? "#ef4444" : "#ffffff15",
+                    color: "#fff", fontWeight: 700, fontSize: 13,
+                  }}>{n}</button>
                 ))}
               </div>
             </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid #ffffff15", paddingLeft: 16 }}>
-              <span style={{ fontSize: 13, color: "#9ca3af" }}>🏖️ Férias:</span>
-              {[1, 2, 3, 4, 5].map(n => (
-                <button key={n} onClick={() => {
-                  setFeriasCont(feriasCont === n ? null : n);
-                  setBaixaCont(null);
-                }} style={{
-                  width: 30, height: 30, borderRadius: 8, border: "none", cursor: "pointer",
-                  background: feriasCont === n ? "#f59e0b" : "#ffffff15",
-                  color: feriasCont === n ? "#000" : "#fff",
-                  fontWeight: 700, fontSize: 13,
-                }}>{n}</button>
-              ))}
+          ) : (
+            <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: currentUser.color }}>{remaining}</div>
+                <div style={{ fontSize: 11, color: "#6b7280" }}>dias restantes</div>
+              </div>
+              <div style={{ width: 1, height: 32, background: "#ffffff10" }} />
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>{usedBalance}</div>
+                <div style={{ fontSize: 11, color: "#6b7280" }}>usados</div>
+              </div>
+              <div style={{ width: 1, height: 32, background: "#ffffff10" }} />
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#6b7280" }}>{MONTHLY_BALANCE}</div>
+                <div style={{ fontSize: 11, color: "#6b7280" }}>total/mês</div>
+              </div>
             </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid #ffffff15", paddingLeft: 16 }}>
-              <span style={{ fontSize: 13, color: "#9ca3af" }}>🤒 Baixa:</span>
-              {[1, 2, 3, 4, 5].map(n => (
-                <button key={n} onClick={() => {
-                  setBaixaCont(baixaCont === n ? null : n);
-                  setFeriasCont(null);
-                }} style={{
-                  width: 30, height: 30, borderRadius: 8, border: "none", cursor: "pointer",
-                  background: baixaCont === n ? "#ef4444" : "#ffffff15",
-                  color: "#fff",
-                  fontWeight: 700, fontSize: 13,
-                }}>{n}</button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: currentUser.color }}>{remaining}</div>
-              <div style={{ fontSize: 11, color: "#6b7280" }}>dias restantes</div>
-            </div>
-            <div style={{ width: 1, height: 32, background: "#ffffff10" }} />
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>{usedBalance}</div>
-              <div style={{ fontSize: 11, color: "#6b7280" }}>usados</div>
-            </div>
-            <div style={{ width: 1, height: 32, background: "#ffffff10" }} />
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: "#6b7280" }}>{MONTHLY_BALANCE}</div>
-              <div style={{ fontSize: 11, color: "#6b7280" }}>total/mês</div>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Progress bar */}
-      {!currentUser.isSuper && (
+      {!currentUser.isSuper && !isVisitor && (
         <div style={{ padding: "0 24px", background: "#0f0f13" }}>
           <div style={{ height: 4, background: "#ffffff10", borderRadius: 4, overflow: "hidden" }}>
             <div style={{
@@ -985,17 +982,17 @@ export default function HomeOfficeApp() {
 
       {/* View toggle */}
       <div style={{ padding: "16px 24px 0", display: "flex", gap: 8, alignItems: "center" }}>
-        {["calendar", "team", ...(currentUser.isSuper ? ["history"] : [])].map(v => (
+        {["calendar", "team", ...(currentUser.isSuper && !isVisitor ? ["history"] : [])].map(v => (
           <button key={v} onClick={() => setView(v)} style={{
             padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
-            background: view === v ? currentUser.color : "#ffffff10",
-            color: view === v && currentUser.isSuper ? "#000" : "#fff",
+            background: view === v ? (isVisitor ? "#6366f1" : currentUser.color) : "#ffffff10",
+            color: view === v && currentUser.isSuper && !isVisitor ? "#000" : "#fff",
             fontWeight: 600, fontSize: 13, transition: "all 0.2s",
           }}>
             {v === "calendar" ? "📅 Calendário" : v === "team" ? "👥 Equipa" : "📋 Histórico"}
           </button>
         ))}
-        {currentUser.isSuper && (
+        {currentUser.isSuper && !isVisitor && (
           <button onClick={exportToExcel} style={{
             padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
             background: "#22c55e", color: "#000",
@@ -1011,13 +1008,11 @@ export default function HomeOfficeApp() {
             <div style={{ fontWeight: 700, fontSize: 16 }}>{MONTHS_PT[viewMonth]} {viewYear}</div>
             <button onClick={nextMonth} style={{ background: "#ffffff10", border: "none", color: "#fff", width: 36, height: 36, borderRadius: 8, cursor: "pointer", fontSize: 16 }}>›</button>
           </div>
-
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
             {DAYS_PT.map(d => (
               <div key={d} style={{ textAlign: "center", fontSize: 11, color: "#6b7280", fontWeight: 600, padding: "4px 0" }}>{d}</div>
             ))}
           </div>
-
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
             {calendarDays.map((day, i) => {
               if (!day) return <div key={`empty-${i}`} />;
@@ -1027,31 +1022,33 @@ export default function HomeOfficeApp() {
               const isPast = dateObj < new Date(today.getFullYear(), today.getMonth(), today.getDate());
               const isToday = day === today.getDate() && viewMonth === currentMonth && viewYear === currentYear;
               const dayUsers = getDayBookings(day);
-              const isBookedByMe = currentUser.isSuper
-                ? false
-                : (dayUsers.includes(currentUser.id) || dayUsers.includes(-currentUser.id));
+              const isBookedByMe = (!isVisitor && !currentUser.isSuper)
+                ? (dayUsers.includes(currentUser.id) || dayUsers.includes(-currentUser.id))
+                : false;
               const isFull = dayUsers.length >= MAX_PER_DAY;
-              const tooFar = !currentUser.isSuper && isTooFarAhead(day);
-              const isDisabled = isWeekend || isPast || tooFar;
+              const tooFar = !currentUser.isSuper && !isVisitor && isTooFarAhead(day);
+              const isDisabled = isVisitor ? isWeekend : (isWeekend || isPast || tooFar);
+              const accentColor = isVisitor ? "#6366f1" : currentUser.color;
 
               return (
                 <div key={day} onClick={() => !isDisabled && toggleBooking(day)} style={{
                   minHeight: 72, borderRadius: 10, padding: "8px 6px",
-                  background: isBookedByMe ? `${currentUser.color}25` : isToday ? "#ffffff08" : isWeekend ? "transparent" : "#ffffff05",
-                  border: isBookedByMe ? `1.5px solid ${currentUser.color}60` : isToday ? "1.5px solid #ffffff20" : "1.5px solid transparent",
-                  cursor: isDisabled ? "default" : "pointer",
-                  opacity: isDisabled ? 0.35 : 1,
+                  background: isBookedByMe ? `${accentColor}25` : isToday ? "#ffffff08" : isWeekend ? "transparent" : "#ffffff05",
+                  border: isBookedByMe ? `1.5px solid ${accentColor}60` : isToday ? "1.5px solid #ffffff20" : "1.5px solid transparent",
+                  cursor: isVisitor ? "default" : isDisabled ? "default" : "pointer",
+                  opacity: !isVisitor && isDisabled ? 0.35 : 1,
                   transition: "all 0.15s", position: "relative",
                 }}>
                   <div style={{
                     fontSize: 12, fontWeight: isToday ? 800 : 600,
-                    color: isToday ? currentUser.color : "#e8e8f0",
+                    color: isToday ? accentColor : "#e8e8f0",
                     marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between",
                   }}>
                     {day}
-                    {isFull && !currentUser.isSuper && <span style={{ fontSize: 9, background: "#ef444420", color: "#ef4444", borderRadius: 4, padding: "1px 4px" }}>FULL</span>}
+                    {isFull && !currentUser.isSuper && !isVisitor && (
+                      <span style={{ fontSize: 9, background: "#ef444420", color: "#ef4444", borderRadius: 4, padding: "1px 4px" }}>FULL</span>
+                    )}
                   </div>
-
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
                     {(() => {
                       const feriasCount = dayUsers.filter(id => id === FERIAS_ID).length;
@@ -1074,7 +1071,7 @@ export default function HomeOfficeApp() {
                                 width: 18, height: 18, borderRadius: "50%",
                                 background: u.color, display: "flex", alignItems: "center",
                                 justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff",
-                                border: Math.abs(uid) === currentUser.id ? "1.5px solid #fff" : "none",
+                                border: !isVisitor && Math.abs(uid) === currentUser.id ? "1.5px solid #fff" : "none",
                                 position: "relative",
                               }}>
                                 {u.avatar[0]}
@@ -1100,7 +1097,6 @@ export default function HomeOfficeApp() {
                       );
                     })()}
                   </div>
-
                   {dayUsers.length > 0 && (
                     <div style={{ position: "absolute", bottom: 5, left: 6, right: 6 }}>
                       <div style={{ height: 2, background: "#ffffff10", borderRadius: 2 }}>
@@ -1117,12 +1113,13 @@ export default function HomeOfficeApp() {
               );
             })}
           </div>
-
           <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b7280" }}>
-              <div style={{ width: 12, height: 12, borderRadius: 3, background: `${currentUser.color}40`, border: `1.5px solid ${currentUser.color}` }} />
-              Os teus dias
-            </div>
+            {!isVisitor && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b7280" }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: `${currentUser.color}40`, border: `1.5px solid ${currentUser.color}` }} />
+                Os teus dias
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b7280" }}>
               <div style={{ width: 12, height: 2, background: "#10b981", borderRadius: 2 }} />
               Capacidade disponível
@@ -1137,12 +1134,73 @@ export default function HomeOfficeApp() {
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b7280" }}>
               <span>🤒</span> Baixa
             </div>
-            {!currentUser.isSuper && (
+            {!currentUser.isSuper && !isVisitor && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b7280" }}>
                 <div style={{ width: 12, height: 12, borderRadius: 3, background: "#ffffff30", border: "1px solid #ffffff50" }} />
                 Fora do limite de 30 dias
               </div>
             )}
+          </div>
+
+          {/* Today in HO */}
+          <div style={{ marginTop: 24 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, color: "#9ca3af" }}>Hoje em HO</div>
+            {(() => {
+              const todayKey = getKey(currentYear, currentMonth, today.getDate());
+              const todayUserIds = bookings[todayKey] || [];
+              const feriasToday = todayUserIds.filter(id => id === FERIAS_ID).length;
+              const baixaToday  = todayUserIds.filter(id => id === BAIXA_ID).length;
+              const seenIds = new Set<number>();
+              const regularUsers = todayUserIds
+                .filter(id => id !== FERIAS_ID && id !== BAIXA_ID)
+                .filter(uid => {
+                  const absId = Math.abs(uid);
+                  if (seenIds.has(absId)) return false;
+                  seenIds.add(absId);
+                  return true;
+                })
+                .map(id => TEAM.find(u => u.id === Math.abs(id)))
+                .filter(Boolean) as typeof TEAM;
+              return regularUsers.length === 0 && feriasToday === 0 && baixaToday === 0 ? (
+                <div style={{ color: "#4b5563", fontSize: 14, fontStyle: "italic" }}>Ninguém em HO hoje.</div>
+              ) : (
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {regularUsers.map(u => (
+                    <div key={u.id} style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      background: `${u.color}15`, border: `1px solid ${u.color}40`,
+                      borderRadius: 8, padding: "8px 12px",
+                    }}>
+                      <div style={{
+                        width: 28, height: 28, borderRadius: "50%", background: u.color,
+                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700,
+                      }}>{u.avatar}</div>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{u.name}</span>
+                    </div>
+                  ))}
+                  {feriasToday > 0 && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      background: "#f59e0b20", border: "1px solid #f59e0b40",
+                      borderRadius: 8, padding: "8px 12px",
+                    }}>
+                      <span style={{ fontSize: 18 }}>🏖️</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>Férias ×{feriasToday}</span>
+                    </div>
+                  )}
+                  {baixaToday > 0 && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      background: "#ef444420", border: "1px solid #ef444440",
+                      borderRadius: 8, padding: "8px 12px",
+                    }}>
+                      <span style={{ fontSize: 18 }}>🤒</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>Baixa ×{baixaToday}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1208,7 +1266,6 @@ export default function HomeOfficeApp() {
                 })
                 .map(id => TEAM.find(u => u.id === Math.abs(id)))
                 .filter(Boolean) as typeof TEAM;
-
               return regularUsers.length === 0 && feriasToday === 0 && baixaToday === 0 ? (
                 <div style={{ color: "#4b5563", fontSize: 14, fontStyle: "italic" }}>Ninguém em HO hoje.</div>
               ) : (
@@ -1253,8 +1310,7 @@ export default function HomeOfficeApp() {
         </div>
       )}
 
-      {/* ── HISTORY VIEW (supervisor only) ─────────────────────────────────── */}
-      {view === "history" && currentUser.isSuper && (
+      {view === "history" && currentUser.isSuper && !isVisitor && (
         <HistoryView
           auditLog={auditLog}
           auditFilter={auditFilter}
