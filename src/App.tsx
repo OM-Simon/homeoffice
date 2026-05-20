@@ -361,24 +361,17 @@ function HistoryView({
   const todayStr = today.toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
 
-  // Get all unique dates that have audit entries, for the "has entries" indicator
+  // Get all unique booking dates that have audit entries, for the "has entries" indicator
   const datesWithEntries = useMemo(() => {
     const s = new Set<string>();
-    auditLog.forEach(e => {
-      // Use local date to avoid UTC timezone shifting the date
-      const d = e.timestamp;
-      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-      s.add(key);
-    });
+    auditLog.forEach(e => s.add(e.targetDate));
     return s;
   }, [auditLog]);
 
-  // Filter by selected date (timestamp local date) and optional user filter
+  // Filter by selected booking date (targetDate) and optional user filter
   const filtered = useMemo(() => {
     return auditLog.filter(e => {
-      const d = e.timestamp;
-      const entryDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-      if (entryDate !== selectedDate) return false;
+      if (e.targetDate !== selectedDate) return false;
       if (auditFilter === "all") return true;
       return (
         e.userId === auditFilter ||
@@ -387,8 +380,8 @@ function HistoryView({
     });
   }, [auditLog, selectedDate, auditFilter]);
 
-  const formatTime = (d: Date) =>
-    d.toLocaleString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const formatTimestamp = (d: Date) =>
+    d.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   const formatTargetDate = (s: string) => {
     const [y, m, day] = s.split("-");
@@ -516,10 +509,7 @@ function HistoryView({
                   </div>
                   <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3, display: "flex", gap: 12, flexWrap: "wrap" }}>
                     <span>
-                      Dia agendado: <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTargetDate(entry.targetDate)}</span>
-                    </span>
-                    <span>
-                      Às <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTime(entry.timestamp)}</span>
+                      Alteração feita em: <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTimestamp(entry.timestamp)}</span>
                     </span>
                   </div>
                 </div>
