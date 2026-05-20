@@ -337,6 +337,114 @@ function CancelDialog({
   );
 }
 
+const ACTION_LABELS: Record<AuditEntry["action"], { label: string; emoji: string; color: string }> = {
+  book:          { label: "Reservou",          emoji: "🏠", color: "#10b981" },
+  cancel:        { label: "Cancelou",          emoji: "✖️", color: "#ef4444" },
+  super_assign:  { label: "Atribuiu (Sup.)",   emoji: "⭐", color: "#6366f1" },
+  super_remove:  { label: "Removeu (Sup.)",    emoji: "⭐", color: "#f43f5e" },
+  ferias_add:    { label: "Adicionou férias",  emoji: "🏖️", color: "#f59e0b" },
+  ferias_remove: { label: "Removeu férias",    emoji: "🏖️", color: "#b45309" },
+  baixa_add:     { label: "Adicionou baixa",   emoji: "🤒", color: "#fb923c" },
+  baixa_remove:  { label: "Removeu baixa",     emoji: "🤒", color: "#92400e" },
+};
+
+function HistoryView({
+  auditLog,
+  auditFilter,
+  setAuditFilter,
+}: {
+  auditLog: AuditEntry[];
+  auditFilter: "all" | number;
+  setAuditFilter: (v: "all" | number) => void;
+}) {
+  const filtered = auditFilter === "all"
+    ? auditLog
+    : auditLog.filter(e =>
+        e.userId === auditFilter ||
+        (e.targetUserName && TEAM.find(t => t.id === auditFilter)?.name === e.targetUserName)
+      );
+
+  const formatDate = (d: Date) =>
+    d.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  const formatTargetDate = (s: string) => {
+    const [y, m, day] = s.split("-");
+    return `${day}/${m}/${y}`;
+  };
+
+  return (
+    <div style={{ padding: "16px 24px 32px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: "#9ca3af" }}>
+          Histórico de alterações
+          <span style={{ marginLeft: 10, fontSize: 12, background: "#ffffff10", borderRadius: 6, padding: "2px 8px", color: "#6b7280" }}>
+            {filtered.length} registo{filtered.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "#6b7280" }}>Filtrar:</span>
+          <button onClick={() => setAuditFilter("all")} style={{
+            padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+            background: auditFilter === "all" ? "#ffffff30" : "#ffffff10", color: "#fff",
+          }}>Todos</button>
+          {TEAM.filter(u => !u.isSuper).map(u => (
+            <button key={u.id} onClick={() => setAuditFilter(auditFilter === u.id ? "all" : u.id)} style={{
+              padding: "4px 8px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+              background: auditFilter === u.id ? u.color : "#ffffff10",
+              color: auditFilter === u.id ? "#000" : "#fff",
+            }}>{u.avatar}</button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ color: "#4b5563", fontSize: 14, fontStyle: "italic", textAlign: "center", marginTop: 40 }}>
+          Nenhum registo encontrado.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {filtered.map(entry => {
+            const meta = ACTION_LABELS[entry.action];
+            const actor = TEAM.find(t => t.id === entry.userId);
+            return (
+              <div key={entry.id} style={{
+                display: "flex", alignItems: "center", gap: 12,
+                background: "#ffffff05", border: "1px solid #ffffff08",
+                borderRadius: 10, padding: "10px 14px",
+                borderLeft: `3px solid ${meta.color}`,
+              }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                  background: actor?.color ?? "#6b7280",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 10, fontWeight: 700, color: "#fff",
+                }}>{actor?.avatar ?? "?"}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span>{entry.userName}</span>
+                    <span style={{
+                      fontSize: 11, background: `${meta.color}20`, color: meta.color,
+                      borderRadius: 5, padding: "1px 6px",
+                    }}>{meta.emoji} {meta.label}</span>
+                    {entry.targetUserName && (
+                      <span style={{ fontSize: 11, color: "#9ca3af" }}>→ {entry.targetUserName}</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                    Dia: <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTargetDate(entry.targetDate)}</span>
+                    <span style={{ margin: "0 6px", color: "#ffffff15" }}>·</span>
+                    {formatDate(entry.timestamp)}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function HomeOfficeApp() {
   const [loggedInUser, setLoggedInUser] = useState<typeof TEAM[0] | null>(null);
@@ -1055,108 +1163,15 @@ export default function HomeOfficeApp() {
       )}
 
       {/* ── HISTORY VIEW (supervisor only) ─────────────────────────────────── */}
-      {view === "history" && currentUser.isSuper && (() => {
-        const ACTION_LABELS: Record<AuditEntry["action"], { label: string; emoji: string; color: string }> = {
-          book:           { label: "Reservou",            emoji: "🏠", color: "#10b981" },
-          cancel:         { label: "Cancelou",            emoji: "✖️", color: "#ef4444" },
-          super_assign:   { label: "Atribuiu (Sup.)",     emoji: "⭐", color: "#6366f1" },
-          super_remove:   { label: "Removeu (Sup.)",      emoji: "⭐", color: "#f43f5e" },
-          ferias_add:     { label: "Adicionou férias",    emoji: "🏖️", color: "#f59e0b" },
-          ferias_remove:  { label: "Removeu férias",      emoji: "🏖️", color: "#b45309" },
-          baixa_add:      { label: "Adicionou baixa",     emoji: "🤒", color: "#fb923c" },
-          baixa_remove:   { label: "Removeu baixa",       emoji: "🤒", color: "#92400e" },
-        };
+      {view === "history" && currentUser.isSuper && (
+        <HistoryView
+          auditLog={auditLog}
+          auditFilter={auditFilter}
+          setAuditFilter={setAuditFilter}
+        />
+      )}
 
-        const filtered = auditFilter === "all"
-          ? auditLog
-          : auditLog.filter(e => e.userId === auditFilter || (e.targetUserName && TEAM.find(t => t.id === auditFilter)?.name === e.targetUserName));
-
-        const formatDate = (d: Date) =>
-          d.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-
-        const formatTargetDate = (s: string) => {
-          const [y, m, d] = s.split("-");
-          return `${d}/${m}/${y}`;
-        };
-
-        return (
-          <div style={{ padding: "16px 24px 32px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: "#9ca3af" }}>
-                Histórico de alterações
-                <span style={{ marginLeft: 10, fontSize: 12, background: "#ffffff10", borderRadius: 6, padding: "2px 8px", color: "#6b7280" }}>
-                  {filtered.length} registo{filtered.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-
-              {/* Filter by user */}
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 12, color: "#6b7280" }}>Filtrar:</span>
-                <button onClick={() => setAuditFilter("all")} style={{
-                  padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
-                  background: auditFilter === "all" ? "#ffffff30" : "#ffffff10",
-                  color: "#fff",
-                }}>Todos</button>
-                {TEAM.filter(u => !u.isSuper).map(u => (
-                  <button key={u.id} onClick={() => setAuditFilter(auditFilter === u.id ? "all" : u.id)} style={{
-                    padding: "4px 8px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
-                    background: auditFilter === u.id ? u.color : "#ffffff10",
-                    color: auditFilter === u.id ? "#000" : "#fff",
-                  }}>{u.avatar}</button>
-                ))}
-              </div>
-            </div>
-
-            {filtered.length === 0 ? (
-              <div style={{ color: "#4b5563", fontSize: 14, fontStyle: "italic", textAlign: "center", marginTop: 40 }}>
-                Nenhum registo encontrado.
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {filtered.map(entry => {
-                  const meta = ACTION_LABELS[entry.action];
-                  const actor = TEAM.find(t => t.id === entry.userId);
-                  return (
-                    <div key={entry.id} style={{
-                      display: "flex", alignItems: "center", gap: 12,
-                      background: "#ffffff05", border: "1px solid #ffffff08",
-                      borderRadius: 10, padding: "10px 14px",
-                      borderLeft: `3px solid ${meta.color}`,
-                    }}>
-                      {/* Actor avatar */}
-                      <div style={{
-                        width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
-                        background: actor?.color ?? "#6b7280",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 10, fontWeight: 700, color: "#fff",
-                      }}>{actor?.avatar ?? "?"}</div>
-
-                      {/* Content */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <span>{entry.userName}</span>
-                          <span style={{
-                            fontSize: 11, background: `${meta.color}20`, color: meta.color,
-                            borderRadius: 5, padding: "1px 6px",
-                          }}>{meta.emoji} {meta.label}</span>
-                          {entry.targetUserName && (
-                            <span style={{ fontSize: 11, color: "#9ca3af" }}>→ {entry.targetUserName}</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                          Dia: <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTargetDate(entry.targetDate)}</span>
-                          <span style={{ margin: "0 6px", color: "#ffffff15" }}>·</span>
-                          {formatDate(entry.timestamp)}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      {toast && (
         <div style={{
           position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
           background: toast.type === "error" ? "#ef4444" : "#10b981",
