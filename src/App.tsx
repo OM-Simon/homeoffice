@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { db } from "./firebase";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, collection, addDoc, serverTimestamp, query, orderBy, getDocs } from "firebase/firestore";
 
 const TEAM = [
   { id: 1,  name: "Beatriz dos Santos", avatar: "BS",  color: "#6366f1", isSuper: false },
@@ -58,6 +58,16 @@ function getFirstDayOfMonth(year: number, month: number) {
 
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DAYS_PT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+
+type AuditEntry = {
+  id: string;
+  userId: number;
+  userName: string;
+  action: "book" | "cancel" | "super_assign" | "super_remove" | "ferias_add" | "ferias_remove" | "baixa_add" | "baixa_remove";
+  targetDate: string;
+  targetUserName?: string;
+  timestamp: Date;
+};
 
 // ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
 function LoginPage({ onLogin, idleLoggedOut }: { onLogin: (user: typeof TEAM[0]) => void; idleLoggedOut?: boolean }) {
@@ -342,6 +352,24 @@ export default function HomeOfficeApp() {
   // Cancel confirmation dialog state
   const [cancelDialog, setCancelDialog] = useState<{ day: number } | null>(null);
 
+  // Audit log
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [auditFilter, setAuditFilter] = useState<"all" | number>("all");
+
+  useEffect(() => {
+    if (!loggedInUser?.isSuper) return;
+    const q = query(collection(db, "auditLog"), orderBy("timestamp", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const entries: AuditEntry[] = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        timestamp: d.data().timestamp?.toDate() ?? new Date(),
+      })) as AuditEntry[];
+      setAuditLog(entries);
+    });
+    return () => unsub();
+  }, [loggedInUser]);
+
   // Once logged in, set currentUser
   const handleLogin = (user: typeof TEAM[0]) => {
     setLoggedInUser(user);
@@ -359,7 +387,7 @@ export default function HomeOfficeApp() {
 
   // ── Idle timeout: logout after IDLE_TIMEOUT_MS of inactivity ──────────────
   useEffect(() => {
-    if (!loggedInUser || loggedInUser.isSuper) return; // skip for supervisor // only active when logged in
+    if (!loggedInUser) return; // only active when logged in
 
     let timer: ReturnType<typeof setTimeout>;
 
@@ -392,6 +420,21 @@ export default function HomeOfficeApp() {
   const saveBookings = async (newBookings: Record<string, number[]>) => {
     const ref = doc(db, "bookings", "all");
     await setDoc(ref, newBookings);
+  };
+
+  const writeAudit = async (
+    action: AuditEntry["action"],
+    targetDate: string,
+    targetUserName?: string,
+  ) => {
+    await addDoc(collection(db, "auditLog"), {
+      userId: currentUser.id,
+      userName: currentUser.name,
+      action,
+      targetDate,
+      targetUserName: targetUserName ?? null,
+      timestamp: serverTimestamp(),
+    });
   };
 
   const showToast = (msg: string, type = "success") => {
@@ -430,6 +473,7 @@ export default function HomeOfficeApp() {
     const newBookings = { ...bookings, [key]: dayBookings.filter(id => id !== currentUser.id) };
     setBookings(newBookings);
     await saveBookings(newBookings);
+    await writeAudit("cancel", key);
     showToast("Reserva cancelada.");
   };
 
@@ -453,12 +497,14 @@ export default function HomeOfficeApp() {
           const newBookings = { ...bookings, [key]: newDayBookings };
           setBookings(newBookings);
           await saveBookings(newBookings);
+          await writeAudit("ferias_remove", key);
           showToast("Férias removidas deste dia.");
         } else {
           const newDayBookings = [...dayBookings, ...Array(feriasCont).fill(FERIAS_ID)];
           const newBookings = { ...bookings, [key]: newDayBookings };
           setBookings(newBookings);
           await saveBookings(newBookings);
+          await writeAudit("ferias_add", key);
           showToast(`${feriasCont} dia(s) de férias adicionado(s). 🏖️`);
         }
         return;
@@ -471,12 +517,14 @@ export default function HomeOfficeApp() {
           const newBookings = { ...bookings, [key]: newDayBookings };
           setBookings(newBookings);
           await saveBookings(newBookings);
+          await writeAudit("baixa_remove", key);
           showToast("Baixa removida deste dia.");
         } else {
           const newDayBookings = [...dayBookings, ...Array(baixaCont).fill(BAIXA_ID)];
           const newBookings = { ...bookings, [key]: newDayBookings };
           setBookings(newBookings);
           await saveBookings(newBookings);
+          await writeAudit("baixa_add", key);
           showToast(`${baixaCont} dia(s) de baixa adicionado(s). 🤒`);
         }
         return;
@@ -489,11 +537,13 @@ export default function HomeOfficeApp() {
         const newBookings = { ...bookings, [key]: dayBookings };
         setBookings(newBookings);
         await saveBookings(newBookings);
+        await writeAudit("super_remove", key, selectedUserForAdmin.name);
         showToast(`Removido: ${selectedUserForAdmin.name}`);
       } else {
         const newBookings = { ...bookings, [key]: [...dayBookings, -targetId] };
         setBookings(newBookings);
         await saveBookings(newBookings);
+        await writeAudit("super_assign", key, selectedUserForAdmin.name);
         showToast(`Atribuído: ${selectedUserForAdmin.name}`);
       }
       return;
@@ -509,7 +559,6 @@ export default function HomeOfficeApp() {
     }
 
     if (isBookedByUser) {
-      // Show confirmation dialog instead of removing immediately
       setCancelDialog({ day });
       return;
     }
@@ -521,6 +570,7 @@ export default function HomeOfficeApp() {
     const newBookings = { ...bookings, [key]: [...dayBookings, currentUser.id] };
     setBookings(newBookings);
     await saveBookings(newBookings);
+    await writeAudit("book", key);
     showToast("Dia reservado! 🏠");
   };
 
@@ -738,14 +788,14 @@ export default function HomeOfficeApp() {
 
       {/* View toggle */}
       <div style={{ padding: "16px 24px 0", display: "flex", gap: 8, alignItems: "center" }}>
-        {["calendar", "team"].map(v => (
+        {["calendar", "team", ...(currentUser.isSuper ? ["history"] : [])].map(v => (
           <button key={v} onClick={() => setView(v)} style={{
             padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
             background: view === v ? currentUser.color : "#ffffff10",
             color: view === v && currentUser.isSuper ? "#000" : "#fff",
             fontWeight: 600, fontSize: 13, transition: "all 0.2s",
           }}>
-            {v === "calendar" ? "📅 Calendário" : "👥 Equipa"}
+            {v === "calendar" ? "📅 Calendário" : v === "team" ? "👥 Equipa" : "📋 Histórico"}
           </button>
         ))}
         {currentUser.isSuper && (
@@ -1004,7 +1054,109 @@ export default function HomeOfficeApp() {
         </div>
       )}
 
-      {toast && (
+      {/* ── HISTORY VIEW (supervisor only) ─────────────────────────────────── */}
+      {view === "history" && currentUser.isSuper && (() => {
+        const ACTION_LABELS: Record<AuditEntry["action"], { label: string; emoji: string; color: string }> = {
+          book:           { label: "Reservou",            emoji: "🏠", color: "#10b981" },
+          cancel:         { label: "Cancelou",            emoji: "✖️", color: "#ef4444" },
+          super_assign:   { label: "Atribuiu (Sup.)",     emoji: "⭐", color: "#6366f1" },
+          super_remove:   { label: "Removeu (Sup.)",      emoji: "⭐", color: "#f43f5e" },
+          ferias_add:     { label: "Adicionou férias",    emoji: "🏖️", color: "#f59e0b" },
+          ferias_remove:  { label: "Removeu férias",      emoji: "🏖️", color: "#b45309" },
+          baixa_add:      { label: "Adicionou baixa",     emoji: "🤒", color: "#fb923c" },
+          baixa_remove:   { label: "Removeu baixa",       emoji: "🤒", color: "#92400e" },
+        };
+
+        const filtered = auditFilter === "all"
+          ? auditLog
+          : auditLog.filter(e => e.userId === auditFilter || (e.targetUserName && TEAM.find(t => t.id === auditFilter)?.name === e.targetUserName));
+
+        const formatDate = (d: Date) =>
+          d.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+        const formatTargetDate = (s: string) => {
+          const [y, m, d] = s.split("-");
+          return `${d}/${m}/${y}`;
+        };
+
+        return (
+          <div style={{ padding: "16px 24px 32px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "#9ca3af" }}>
+                Histórico de alterações
+                <span style={{ marginLeft: 10, fontSize: 12, background: "#ffffff10", borderRadius: 6, padding: "2px 8px", color: "#6b7280" }}>
+                  {filtered.length} registo{filtered.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {/* Filter by user */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 12, color: "#6b7280" }}>Filtrar:</span>
+                <button onClick={() => setAuditFilter("all")} style={{
+                  padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                  background: auditFilter === "all" ? "#ffffff30" : "#ffffff10",
+                  color: "#fff",
+                }}>Todos</button>
+                {TEAM.filter(u => !u.isSuper).map(u => (
+                  <button key={u.id} onClick={() => setAuditFilter(auditFilter === u.id ? "all" : u.id)} style={{
+                    padding: "4px 8px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                    background: auditFilter === u.id ? u.color : "#ffffff10",
+                    color: auditFilter === u.id ? "#000" : "#fff",
+                  }}>{u.avatar}</button>
+                ))}
+              </div>
+            </div>
+
+            {filtered.length === 0 ? (
+              <div style={{ color: "#4b5563", fontSize: 14, fontStyle: "italic", textAlign: "center", marginTop: 40 }}>
+                Nenhum registo encontrado.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {filtered.map(entry => {
+                  const meta = ACTION_LABELS[entry.action];
+                  const actor = TEAM.find(t => t.id === entry.userId);
+                  return (
+                    <div key={entry.id} style={{
+                      display: "flex", alignItems: "center", gap: 12,
+                      background: "#ffffff05", border: "1px solid #ffffff08",
+                      borderRadius: 10, padding: "10px 14px",
+                      borderLeft: `3px solid ${meta.color}`,
+                    }}>
+                      {/* Actor avatar */}
+                      <div style={{
+                        width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                        background: actor?.color ?? "#6b7280",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 10, fontWeight: 700, color: "#fff",
+                      }}>{actor?.avatar ?? "?"}</div>
+
+                      {/* Content */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span>{entry.userName}</span>
+                          <span style={{
+                            fontSize: 11, background: `${meta.color}20`, color: meta.color,
+                            borderRadius: 5, padding: "1px 6px",
+                          }}>{meta.emoji} {meta.label}</span>
+                          {entry.targetUserName && (
+                            <span style={{ fontSize: 11, color: "#9ca3af" }}>→ {entry.targetUserName}</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                          Dia: <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTargetDate(entry.targetDate)}</span>
+                          <span style={{ margin: "0 6px", color: "#ffffff15" }}>·</span>
+                          {formatDate(entry.timestamp)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
         <div style={{
           position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
           background: toast.type === "error" ? "#ef4444" : "#10b981",
