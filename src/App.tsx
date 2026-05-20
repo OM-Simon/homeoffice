@@ -751,9 +751,10 @@ export default function HomeOfficeApp() {
           month={viewMonth}
           year={viewYear}
           color={currentUser.color}
-          onConfirm={async () => {
-            await performRemoveBooking(cancelDialog.day);
+          onConfirm={() => {
+            const day = cancelDialog.day;
             setCancelDialog(null);
+            performRemoveBooking(day);
           }}
           onCancel={() => setCancelDialog(null)}
         />
