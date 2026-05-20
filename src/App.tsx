@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { db } from "./firebase";
-import { doc, onSnapshot, setDoc, collection, addDoc, serverTimestamp, query, orderBy, getDocs } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, collection, addDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 
 const TEAM = [
   { id: 1,  name: "Beatriz dos Santos", avatar: "BS",  color: "#6366f1", isSuper: false },
@@ -357,32 +357,68 @@ function HistoryView({
   auditFilter: "all" | number;
   setAuditFilter: (v: "all" | number) => void;
 }) {
-  const filtered = auditFilter === "all"
-    ? auditLog
-    : auditLog.filter(e =>
+  // Default selected date = today in YYYY-MM-DD
+  const todayStr = today.toISOString().slice(0, 10);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+
+  // Get all unique dates that have audit entries, for the "has entries" indicator
+  const datesWithEntries = useMemo(() => {
+    const s = new Set<string>();
+    auditLog.forEach(e => {
+      // Use local date to avoid UTC timezone shifting the date
+      const d = e.timestamp;
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      s.add(key);
+    });
+    return s;
+  }, [auditLog]);
+
+  // Filter by selected date (timestamp local date) and optional user filter
+  const filtered = useMemo(() => {
+    return auditLog.filter(e => {
+      const d = e.timestamp;
+      const entryDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      if (entryDate !== selectedDate) return false;
+      if (auditFilter === "all") return true;
+      return (
         e.userId === auditFilter ||
         (e.targetUserName && TEAM.find(t => t.id === auditFilter)?.name === e.targetUserName)
       );
+    });
+  }, [auditLog, selectedDate, auditFilter]);
 
-  const formatDate = (d: Date) =>
-    d.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const formatTime = (d: Date) =>
+    d.toLocaleString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   const formatTargetDate = (s: string) => {
     const [y, m, day] = s.split("-");
     return `${day}/${m}/${y}`;
   };
 
+  const formatSelectedDate = (s: string) => {
+    const [y, m, d] = s.split("-");
+    return `${d}/${m}/${y}`;
+  };
+
+  // Navigate dates
+  const shiftDate = (delta: number) => {
+    const d = new Date(selectedDate + "T12:00:00");
+    d.setDate(d.getDate() + delta);
+    setSelectedDate(d.toISOString().slice(0, 10));
+  };
+
   return (
     <div style={{ padding: "16px 24px 32px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
         <div style={{ fontWeight: 700, fontSize: 15, color: "#9ca3af" }}>
           Histórico de alterações
-          <span style={{ marginLeft: 10, fontSize: 12, background: "#ffffff10", borderRadius: 6, padding: "2px 8px", color: "#6b7280" }}>
-            {filtered.length} registo{filtered.length !== 1 ? "s" : ""}
-          </span>
         </div>
+
+        {/* User filter */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: "#6b7280" }}>Filtrar:</span>
+          <span style={{ fontSize: 12, color: "#6b7280" }}>Utilizador:</span>
           <button onClick={() => setAuditFilter("all")} style={{
             padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
             background: auditFilter === "all" ? "#ffffff30" : "#ffffff10", color: "#fff",
@@ -397,9 +433,56 @@ function HistoryView({
         </div>
       </div>
 
+      {/* Date picker row */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12, marginBottom: 20,
+        background: "#ffffff06", border: "1px solid #ffffff0f",
+        borderRadius: 12, padding: "12px 16px",
+      }}>
+        <button onClick={() => shiftDate(-1)} style={{
+          background: "#ffffff10", border: "none", color: "#fff",
+          width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 16, flexShrink: 0,
+        }}>‹</button>
+
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)}
+            style={{
+              background: "#ffffff10", border: "1px solid #ffffff20",
+              borderRadius: 8, padding: "6px 10px",
+              color: "#e8e8f0", fontSize: 13, fontFamily: "inherit",
+              cursor: "pointer", outline: "none",
+            }}
+          />
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#e8e8f0" }}>
+            {formatSelectedDate(selectedDate)}
+            {selectedDate === todayStr && (
+              <span style={{ marginLeft: 8, fontSize: 11, background: "#6366f130", color: "#818cf8", borderRadius: 5, padding: "2px 7px" }}>hoje</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: "#6b7280" }}>
+            {datesWithEntries.has(selectedDate)
+              ? <span style={{ color: "#10b981" }}>● {filtered.length} registo{filtered.length !== 1 ? "s" : ""}</span>
+              : <span style={{ color: "#4b5563" }}>Sem registos</span>
+            }
+          </div>
+        </div>
+
+        <button
+          onClick={() => shiftDate(1)}
+          style={{
+            background: "#ffffff10", border: "none", color: "#fff",
+            width: 32, height: 32, borderRadius: 8,
+            cursor: "pointer", fontSize: 16, flexShrink: 0,
+          }}>›</button>
+      </div>
+
+      {/* Results */}
       {filtered.length === 0 ? (
         <div style={{ color: "#4b5563", fontSize: 14, fontStyle: "italic", textAlign: "center", marginTop: 40 }}>
-          Nenhum registo encontrado.
+          Nenhuma alteração registada para este dia.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -414,11 +497,12 @@ function HistoryView({
                 borderLeft: `3px solid ${meta.color}`,
               }}>
                 <div style={{
-                  width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                  width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
                   background: actor?.color ?? "#6b7280",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 10, fontWeight: 700, color: "#fff",
                 }}>{actor?.avatar ?? "?"}</div>
+
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <span>{entry.userName}</span>
@@ -430,10 +514,13 @@ function HistoryView({
                       <span style={{ fontSize: 11, color: "#9ca3af" }}>→ {entry.targetUserName}</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                    Dia: <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTargetDate(entry.targetDate)}</span>
-                    <span style={{ margin: "0 6px", color: "#ffffff15" }}>·</span>
-                    {formatDate(entry.timestamp)}
+                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <span>
+                      Dia agendado: <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTargetDate(entry.targetDate)}</span>
+                    </span>
+                    <span>
+                      Às <span style={{ color: "#e8e8f0", fontWeight: 600 }}>{formatTime(entry.timestamp)}</span>
+                    </span>
                   </div>
                 </div>
               </div>
@@ -468,15 +555,22 @@ export default function HomeOfficeApp() {
     if (!loggedInUser?.isSuper) return;
     const q = query(collection(db, "auditLog"), orderBy("timestamp", "desc"));
     const unsub = onSnapshot(q, (snap) => {
-      const entries: AuditEntry[] = snap.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-        timestamp: d.data().timestamp?.toDate() ?? new Date(),
-      })) as AuditEntry[];
+      const entries: AuditEntry[] = snap.docs
+        .map(d => {
+          const data = d.data();
+          // serverTimestamp() is null on the first local write — fall back to clientDate
+          const ts = data.timestamp?.toDate()
+            ?? (data.clientDate ? new Date(data.clientDate) : null);
+          if (!ts) return null;
+          return { id: d.id, ...data, timestamp: ts } as AuditEntry;
+        })
+        .filter(Boolean) as AuditEntry[];
       setAuditLog(entries);
     });
     return () => unsub();
   }, [loggedInUser]);
+
+  const [idleLoggedOut, setIdleLoggedOut] = useState(false);
 
   // Once logged in, set currentUser
   const handleLogin = (user: typeof TEAM[0]) => {
@@ -491,22 +585,23 @@ export default function HomeOfficeApp() {
     }
   };
 
-  const [idleLoggedOut, setIdleLoggedOut] = useState(false);
-
   // ── Idle timeout: logout after IDLE_TIMEOUT_MS of inactivity ──────────────
   useEffect(() => {
-    if (!loggedInUser) return; // only active when logged in
+    if (!loggedInUser || loggedInUser.isSuper) return;
 
     let timer: ReturnType<typeof setTimeout>;
 
     const resetTimer = () => {
       clearTimeout(timer);
-      timer = setTimeout(() => handleLogout("idle"), IDLE_TIMEOUT_MS);
+      timer = setTimeout(() => {
+        setLoggedInUser(null);
+        setIdleLoggedOut(true);
+      }, IDLE_TIMEOUT_MS);
     };
 
     const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
     events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
-    resetTimer(); // start the timer immediately on login
+    resetTimer();
 
     return () => {
       clearTimeout(timer);
@@ -535,6 +630,8 @@ export default function HomeOfficeApp() {
     targetDate: string,
     targetUserName?: string,
   ) => {
+    // Store a clientDate string as backup in case serverTimestamp is null on first read
+    const clientDate = new Date().toISOString();
     await addDoc(collection(db, "auditLog"), {
       userId: currentUser.id,
       userName: currentUser.name,
@@ -542,6 +639,7 @@ export default function HomeOfficeApp() {
       targetDate,
       targetUserName: targetUserName ?? null,
       timestamp: serverTimestamp(),
+      clientDate,
     });
   };
 
@@ -916,7 +1014,7 @@ export default function HomeOfficeApp() {
         )}
       </div>
 
-      {view === "calendar" ? (
+      {view === "calendar" && (
         <div style={{ padding: "16px 24px 32px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <button onClick={prevMonth} style={{ background: "#ffffff10", border: "none", color: "#fff", width: 36, height: 36, borderRadius: 8, cursor: "pointer", fontSize: 16 }}>‹</button>
@@ -1057,7 +1155,9 @@ export default function HomeOfficeApp() {
             )}
           </div>
         </div>
-      ) : (
+      )}
+
+      {view === "team" && (
         <div style={{ padding: "16px 24px 32px" }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: "#9ca3af" }}>
             Saldos da Equipa — {MONTHS_PT[viewMonth]} {viewYear}
