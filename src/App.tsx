@@ -40,6 +40,7 @@ const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const MONTHLY_BALANCE = 7;
 const MAX_PER_DAY = 5;
 const MAX_DAYS_AHEAD = 30;
+const MAX_DAYS_PER_WEEK = 3;
 const FERIAS_ID = -99;
 const BAIXA_ID  = -98;
 
@@ -547,6 +548,9 @@ export default function HomeOfficeApp() {
   const [auditFilter, setAuditFilter] = useState<"all" | number>("all");
   const [idleLoggedOut, setIdleLoggedOut] = useState(false);
 
+  // absences: { "userId-YYYY-MM": daysOut }
+  const [absences, setAbsences] = useState<Record<string, number>>({});
+
   const handleLogin = (user: typeof TEAM[0]) => {
     setLoggedInUser(user);
     setCurrentUser(user);
@@ -614,9 +618,54 @@ export default function HomeOfficeApp() {
     return () => unsub();
   }, []);
 
+  // Absences — always loaded
+  useEffect(() => {
+    const ref = doc(db, "absences", "all");
+    const unsub = onSnapshot(ref, (snap) => {
+      if (snap.exists()) {
+        setAbsences(snap.data() as Record<string, number>);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   const saveBookings = async (newBookings: Record<string, number[]>) => {
     const ref = doc(db, "bookings", "all");
     await setDoc(ref, newBookings);
+  };
+
+  const saveAbsences = async (newAbsences: Record<string, number>) => {
+    const ref = doc(db, "absences", "all");
+    await setDoc(ref, newAbsences);
+  };
+
+  // Key for absence: "userId-YYYY-MM"
+  const getAbsenceKey = (userId: number, year: number, month: number) =>
+    `${userId}-${year}-${String(month + 1).padStart(2, "0")}`;
+
+  // Effective monthly balance after vacation/sick deduction: floor(daysOut / 3)
+  const getEffectiveBalance = (userId: number, year: number, month: number) => {
+    const key = getAbsenceKey(userId, year, month);
+    const daysOut = absences[key] ?? 0;
+    return Math.max(0, MONTHLY_BALANCE - Math.floor(daysOut / 3));
+  };
+
+  // Count how many HO days a user has in the ISO week containing a given date
+  const getUserBookingsThisWeek = (userId: number, dateObj: Date) => {
+    // Get Monday of the week
+    const day = dateObj.getDay(); // 0=Sun, 1=Mon...
+    const diffToMonday = (day === 0 ? -6 : 1 - day);
+    const monday = new Date(dateObj);
+    monday.setDate(dateObj.getDate() + diffToMonday);
+    let count = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const key = getKey(d.getFullYear(), d.getMonth(), d.getDate());
+      const dayUsers = bookings[key] || [];
+      if (dayUsers.includes(userId) || dayUsers.includes(-userId)) count++;
+    }
+    return count;
   };
 
   const writeAudit = async (
@@ -652,7 +701,6 @@ export default function HomeOfficeApp() {
         (users.includes(userId) || users.includes(-userId));
     }).length;
   };
-
   const getDayBookings = (day: number) => {
     const key = getKey(viewYear, viewMonth, day);
     return bookings[key] || [];
@@ -757,7 +805,10 @@ export default function HomeOfficeApp() {
       return;
     }
     if (isTooFarAhead(day)) { showToast(`Limite de ${MAX_DAYS_AHEAD} dias.`, "error"); return; }
-    if (getUserBookingsThisMonth(currentUser.id) >= MONTHLY_BALANCE) { showToast("Saldo esgotado!", "error"); return; }
+    const effectiveBal = getEffectiveBalance(currentUser.id, viewYear, viewMonth);
+    if (getUserBookingsThisMonth(currentUser.id) >= effectiveBal) { showToast("Saldo mensal esgotado!", "error"); return; }
+    const weekCount = getUserBookingsThisWeek(currentUser.id, dateObj);
+    if (weekCount >= MAX_DAYS_PER_WEEK) { showToast(`Limite de ${MAX_DAYS_PER_WEEK} dias por semana atingido!`, "error"); return; }
     if (dayBookings.length >= MAX_PER_DAY) { showToast("Dia cheio!", "error"); return; }
     const newBookings = { ...bookings, [key]: [...dayBookings, currentUser.id] };
     setBookings(newBookings);
@@ -814,7 +865,8 @@ export default function HomeOfficeApp() {
   };
 
   const usedBalance = getUserBookingsThisMonth(currentUser.id);
-  const remaining = MONTHLY_BALANCE - usedBalance;
+  const effectiveBalance = currentUser.isSuper ? MONTHLY_BALANCE : getEffectiveBalance(currentUser.id, viewYear, viewMonth);
+  const remaining = effectiveBalance - usedBalance;
 
   // Show login page if not logged in and not visitor
   if (!loggedInUser && !isVisitor) {
@@ -957,7 +1009,7 @@ export default function HomeOfficeApp() {
               </div>
               <div style={{ width: 1, height: 32, background: "#ffffff10" }} />
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#6b7280" }}>{MONTHLY_BALANCE}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#6b7280" }}>{effectiveBalance}</div>
                 <div style={{ fontSize: 11, color: "#6b7280" }}>total/mês</div>
               </div>
             </div>
@@ -970,7 +1022,7 @@ export default function HomeOfficeApp() {
         <div style={{ padding: "0 24px", background: "#0f0f13" }}>
           <div style={{ height: 4, background: "#ffffff10", borderRadius: 4, overflow: "hidden" }}>
             <div style={{
-              height: "100%", width: `${(usedBalance / MONTHLY_BALANCE) * 100}%`,
+              height: "100%", width: `${(usedBalance / effectiveBalance) * 100}%`,
               background: remaining <= 2
                 ? "linear-gradient(90deg, #ef4444, #f87171)"
                 : `linear-gradient(90deg, ${currentUser.color}, ${currentUser.color}99)`,
@@ -1218,8 +1270,11 @@ export default function HomeOfficeApp() {
                   parseInt(m) === viewMonth + 1 &&
                   (users.includes(u.id) || users.includes(-u.id));
               }).length;
-              const rem = MONTHLY_BALANCE - used;
-              const pct = Math.min((used / MONTHLY_BALANCE) * 100, 100);
+              const absKey = getAbsenceKey(u.id, viewYear, viewMonth);
+              const daysOut = absences[absKey] ?? 0;
+              const effBal = Math.max(0, MONTHLY_BALANCE - Math.floor(daysOut / 3));
+              const rem = effBal - used;
+              const pct = Math.min((used / effBal) * 100, 100);
               return (
                 <div key={u.id} style={{ background: "#ffffff05", border: "1px solid #ffffff0a", borderRadius: 12, padding: "14px 16px" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -1231,10 +1286,50 @@ export default function HomeOfficeApp() {
                       }}>{u.avatar}</div>
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{u.name}</div>
-                        <div style={{ fontSize: 12, color: "#6b7280" }}>{used} usados · {rem} restantes</div>
+                        <div style={{ fontSize: 12, color: "#6b7280" }}>
+                          {used} usados · {rem} restantes
+                          {daysOut > 0 && (
+                            <span style={{ marginLeft: 6, color: "#f59e0b" }}>
+                              · {daysOut} dia{daysOut !== 1 ? "s" : ""} ausente{daysOut !== 1 ? "s" : ""} (−{Math.floor(daysOut / 3)} HO)
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: rem <= 2 ? "#ef4444" : u.color }}>{rem}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      {/* Absence input — supervisor only */}
+                      {currentUser.isSuper && !isVisitor && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 11, color: "#6b7280" }}>Ausências:</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <button onClick={async () => {
+                              if (daysOut <= 0) return;
+                              const updated = { ...absences, [absKey]: daysOut - 1 };
+                              setAbsences(updated);
+                              await saveAbsences(updated);
+                            }} style={{
+                              width: 24, height: 24, borderRadius: 6, border: "none",
+                              background: "#ffffff15", color: "#fff", cursor: daysOut <= 0 ? "default" : "pointer",
+                              fontSize: 14, fontWeight: 700, opacity: daysOut <= 0 ? 0.3 : 1,
+                            }}>−</button>
+                            <span style={{
+                              minWidth: 28, textAlign: "center", fontSize: 13, fontWeight: 700,
+                              color: daysOut > 0 ? "#f59e0b" : "#6b7280",
+                            }}>{daysOut}</span>
+                            <button onClick={async () => {
+                              const updated = { ...absences, [absKey]: daysOut + 1 };
+                              setAbsences(updated);
+                              await saveAbsences(updated);
+                            }} style={{
+                              width: 24, height: 24, borderRadius: 6, border: "none",
+                              background: "#ffffff15", color: "#fff", cursor: "pointer",
+                              fontSize: 14, fontWeight: 700,
+                            }}>+</button>
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ fontSize: 20, fontWeight: 800, color: rem <= 2 ? "#ef4444" : u.color }}>{rem}</div>
+                    </div>
                   </div>
                   <div style={{ height: 6, background: "#ffffff10", borderRadius: 4, overflow: "hidden" }}>
                     <div style={{
