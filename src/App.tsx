@@ -60,9 +60,6 @@ function getFirstDayOfMonth(year: number, month: number) {
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DAYS_PT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
-// IDs of agents on the LATE shift (⭐ 11h00–19h30) — edit to match your team
-const LATE_SHIFT_IDS = [2, 5, 7, 10, 12];
-
 type AuditEntry = {
   id: string;
   userId: number;
@@ -988,10 +985,9 @@ export default function HomeOfficeApp() {
     const newBookings = { ...bookings, [key]: [...dayBookings, currentUser.id] };
     setBookings(newBookings);
     await saveBookings(newBookings);
-    // Shift is determined by the agent's schedule, not who booked
-    const agentShift = LATE_SHIFT_IDS.includes(currentUser.id) ? "late" : "day";
+    // Agent self-bookings are always morning shift
     const shiftKey = `${currentUser.id}-${key}`;
-    const newShifts = { ...shifts, [shiftKey]: agentShift };
+    const newShifts = { ...shifts, [shiftKey]: "day" as const };
     setShifts(newShifts);
     await saveShifts(newShifts);
     await writeAudit("book", key);
