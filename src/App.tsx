@@ -872,6 +872,12 @@ export default function HomeOfficeApp() {
     const newBookings = { ...bookings, [key]: dayBookings.filter(id => id !== currentUser.id) };
     setBookings(newBookings);
     await saveBookings(newBookings);
+    // Remove shift entry
+    const shiftKey = `${currentUser.id}-${key}`;
+    const newShifts = { ...shifts };
+    delete newShifts[shiftKey];
+    setShifts(newShifts);
+    await saveShifts(newShifts);
     await writeAudit("cancel", key);
     showToast("Reserva cancelada.");
   };
@@ -977,6 +983,11 @@ export default function HomeOfficeApp() {
     const newBookings = { ...bookings, [key]: [...dayBookings, currentUser.id] };
     setBookings(newBookings);
     await saveBookings(newBookings);
+    // Agent self-bookings are always day shift
+    const shiftKey = `${currentUser.id}-${key}`;
+    const newShifts = { ...shifts, [shiftKey]: "day" as const };
+    setShifts(newShifts);
+    await saveShifts(newShifts);
     await writeAudit("book", key);
     showToast("Dia reservado! 🏠");
   };
