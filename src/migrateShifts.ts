@@ -1,30 +1,27 @@
 /**
- * ONE-USE MIGRATION SCRIPT v2 — migrateShifts.ts
+ * ONE-USE MIGRATION SCRIPT v4 — migrateShifts.ts
  *
- * Fixes the shifts collection by re-deriving shift from the AGENT's schedule,
- * not from who made the booking. Overwrites all existing shift entries.
+ * - Agent self-booked days (positive IDs in bookings) → "day" (morning ☀️)
+ * - Supervisor-assigned days (negative IDs in bookings) → "late" (afternoon ⭐)
+ * Completely overwrites the shifts collection.
  *
  * HOW TO USE:
  *   1. Drop this file into your /src folder alongside firebase.ts
- *   2. In your App.tsx, temporarily add:
+ *   2. In your App.tsx, temporarily add these two lines before the return():
  *        import { migrateShifts } from "./migrateShifts";
  *        migrateShifts();
- *   3. Open the app once — check the console for "✅ Migration complete"
- *   4. Remove the two lines above from App.tsx
- *   5. Delete this file
+ *   3. Open the app once in the browser
+ *   4. Check the console for "✅ Migration v4 complete."
+ *   5. Remove the two lines from App.tsx
+ *   6. Delete this file
  */
 
 import { db } from "./firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
-// IDs of agents on the LATE shift (⭐ 11h00–19h30)
-// Must match LATE_SHIFT_IDS in HomeOfficeApp.tsx
-const LATE_SHIFT_IDS = [2, 5, 7, 10, 12];
-
 export async function migrateShifts() {
-  console.log("🔄 Starting shift migration v2...");
+  console.log("🔄 Starting shift migration v4...");
 
-  // 1. Read existing bookings
   const bookingsRef = doc(db, "bookings", "all");
   const bookingsSnap = await getDoc(bookingsRef);
 
@@ -35,27 +32,31 @@ export async function migrateShifts() {
 
   const bookings = bookingsSnap.data() as Record<string, number[]>;
   const newShifts: Record<string, "late" | "day"> = {};
-  let count = 0;
+  let late = 0, day = 0;
 
-  // 2. Loop through every booked day
   for (const [dateKey, userIds] of Object.entries(bookings)) {
     for (const uid of userIds) {
       // Skip férias (-99) and baixa (-98)
       if (uid === -99 || uid === -98) continue;
 
       const absId = Math.abs(uid);
+      const isSupervisorAssigned = uid < 0;
       const shiftKey = `${absId}-${dateKey}`;
 
-      // Shift is determined purely by which list the agent is in —
-      // regardless of whether the booking was self-made or supervisor-assigned
-      newShifts[shiftKey] = LATE_SHIFT_IDS.includes(absId) ? "late" : "day";
-      count++;
+      if (isSupervisorAssigned) {
+        // Supervisor assigned → late shift
+        newShifts[shiftKey] = "late";
+        late++;
+      } else {
+        // Agent self-booked → morning shift
+        newShifts[shiftKey] = "day";
+        day++;
+      }
     }
   }
 
-  // 3. Overwrite the entire shifts collection with the corrected data
+  // Overwrite the entire shifts collection
   const shiftsRef = doc(db, "shifts", "all");
   await setDoc(shiftsRef, newShifts);
-  console.log(`✅ Migration v2 complete. ${count} shift entries written.`);
-  console.log("Entries:", newShifts);
+  console.log(`✅ Migration v4 complete. ${late} late + ${day} day = ${late + day} total entries written.`);
 }
