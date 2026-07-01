@@ -369,80 +369,137 @@ function CancelDialog({
 }
 
 // ─── SCHEDULES DATA ───────────────────────────────────────────────────────────
-// ⭐ = 11h00–19h30  |  no star = 09h00–17h30
-// Edit the "late" array to change who has the star schedule
-const LATE_SHIFT_IDS = [2, 5, 7, 10, 12]; // Cláudia, João Santos, Liane, Nuno, Ricardo Coelho
+function SchedulesView({ shifts }: { shifts: Record<string, "late" | "day"> }) {
+  const [viewMonth, setViewMonth] = useState(currentMonth);
+  const [viewYear, setViewYear] = useState(currentYear);
 
-function SchedulesView() {
-  const lateShift  = TEAM.filter(u => !u.isSuper && LATE_SHIFT_IDS.includes(u.id));
-  const earlyShift = TEAM.filter(u => !u.isSuper && !LATE_SHIFT_IDS.includes(u.id));
+  const daysInMonth = getDaysInMonth(viewYear, viewMonth);
+  const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
 
-  const ShiftCard = ({ u }: { u: typeof TEAM[0] }) => (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 12,
-      background: "#ffffff06", border: "1px solid #ffffff0a",
-      borderRadius: 10, padding: "10px 14px",
-    }}>
-      <div style={{
-        width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
-        background: u.color, display: "flex", alignItems: "center",
-        justifyContent: "center", fontWeight: 700, fontSize: 12, color: "#fff",
-      }}>{u.avatar}</div>
-      <span style={{ fontWeight: 600, fontSize: 14 }}>{u.name}</span>
-    </div>
-  );
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
+
+  const calendarDays = useMemo(() => {
+    const days: (number | null)[] = [];
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    for (let d = 1; d <= daysInMonth; d++) days.push(d);
+    return days;
+  }, [viewYear, viewMonth, daysInMonth, firstDay]);
+
+  const getShiftKey = (userId: number, day: number) => {
+    const dateKey = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return `${userId}-${dateKey}`;
+  };
+
+  const agents = TEAM.filter(u => !u.isSuper);
 
   return (
     <div style={{ padding: "16px 24px 32px" }}>
-      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 20, color: "#9ca3af" }}>
-        Horários da Equipa
+      {/* Month nav */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <button onClick={prevMonth} style={{ background: "#ffffff10", border: "none", color: "#fff", width: 36, height: 36, borderRadius: 8, cursor: "pointer", fontSize: 16 }}>‹</button>
+        <div style={{ fontWeight: 700, fontSize: 16 }}>{MONTHS_PT[viewMonth]} {viewYear}</div>
+        <button onClick={nextMonth} style={{ background: "#ffffff10", border: "none", color: "#fff", width: 36, height: 36, borderRadius: 8, cursor: "pointer", fontSize: 16 }}>›</button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
 
-        {/* Late shift */}
-        <div style={{ background: "#ffffff04", border: "1px solid #ffffff0a", borderRadius: 14, padding: "18px 20px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 10,
-              background: "linear-gradient(135deg, #f59e0b30, #f59e0b10)",
-              border: "1px solid #f59e0b40",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
-            }}>⭐</div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>Turno Tarde</div>
-              <div style={{ fontSize: 13, color: "#f59e0b", fontWeight: 600 }}>11h00 – 19h30</div>
-            </div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {lateShift.map(u => <ShiftCard key={u.id} u={u} />)}
-            {lateShift.length === 0 && (
-              <div style={{ color: "#4b5563", fontSize: 13, fontStyle: "italic" }}>Nenhum agente.</div>
-            )}
-          </div>
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#9ca3af" }}>
+          <span style={{ fontSize: 14 }}>⭐</span> Tarde — 11h00 às 19h30
         </div>
-
-        {/* Early shift */}
-        <div style={{ background: "#ffffff04", border: "1px solid #ffffff0a", borderRadius: 14, padding: "18px 20px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 10,
-              background: "linear-gradient(135deg, #6366f130, #6366f110)",
-              border: "1px solid #6366f140",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
-            }}>☀️</div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>Turno Manhã</div>
-              <div style={{ fontSize: 13, color: "#818cf8", fontWeight: 600 }}>09h00 – 17h30</div>
-            </div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {earlyShift.map(u => <ShiftCard key={u.id} u={u} />)}
-            {earlyShift.length === 0 && (
-              <div style={{ color: "#4b5563", fontSize: 13, fontStyle: "italic" }}>Nenhum agente.</div>
-            )}
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#9ca3af" }}>
+          <span style={{ fontSize: 14 }}>☀️</span> Manhã — 09h00 às 17h30
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#4b5563" }}>
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: "#ffffff10" }} /> Sem HO agendado
+        </div>
+      </div>
 
+      {/* Scrollable table */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
+          <thead>
+            <tr>
+              <th style={{
+                textAlign: "left", padding: "8px 10px", fontSize: 12,
+                color: "#6b7280", fontWeight: 600, whiteSpace: "nowrap",
+                borderBottom: "1px solid #ffffff10", position: "sticky", left: 0,
+                background: "#0f0f13", zIndex: 1, minWidth: 130,
+              }}>Agente</th>
+              {calendarDays.map((day, i) => {
+                if (!day) return null;
+                const dateObj = new Date(viewYear, viewMonth, day);
+                const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                const isToday = day === today.getDate() && viewMonth === currentMonth && viewYear === currentYear;
+                return (
+                  <th key={i} style={{
+                    padding: "6px 4px", fontSize: 11, fontWeight: 600,
+                    color: isToday ? "#818cf8" : isWeekend ? "#374151" : "#6b7280",
+                    borderBottom: "1px solid #ffffff10",
+                    minWidth: 36, textAlign: "center",
+                  }}>
+                    <div>{DAYS_PT[dateObj.getDay()][0]}</div>
+                    <div style={{ fontSize: 12, fontWeight: isToday ? 800 : 600, color: isToday ? "#818cf8" : isWeekend ? "#374151" : "#9ca3af" }}>{day}</div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {agents.map((u, rowIdx) => (
+              <tr key={u.id} style={{ background: rowIdx % 2 === 0 ? "#ffffff03" : "transparent" }}>
+                {/* Agent name cell */}
+                <td style={{
+                  padding: "6px 10px", whiteSpace: "nowrap",
+                  borderBottom: "1px solid #ffffff08",
+                  position: "sticky", left: 0,
+                  background: rowIdx % 2 === 0 ? "#111116" : "#0f0f13", zIndex: 1,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <div style={{
+                      width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
+                      background: u.color, display: "flex", alignItems: "center",
+                      justifyContent: "center", fontSize: 9, fontWeight: 700, color: "#fff",
+                    }}>{u.avatar}</div>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#e8e8f0" }}>{u.name}</span>
+                  </div>
+                </td>
+                {/* Day cells */}
+                {calendarDays.map((day, i) => {
+                  if (!day) return null;
+                  const dateObj = new Date(viewYear, viewMonth, day);
+                  const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                  const isToday = day === today.getDate() && viewMonth === currentMonth && viewYear === currentYear;
+                  const shiftKey = getShiftKey(u.id, day);
+                  const shift = shifts[shiftKey];
+                  return (
+                    <td key={i} style={{
+                      textAlign: "center", padding: "4px 2px",
+                      borderBottom: "1px solid #ffffff08",
+                      background: isToday ? "#6366f110" : isWeekend ? "transparent" : undefined,
+                    }}>
+                      {isWeekend ? (
+                        <span style={{ color: "#1f2937", fontSize: 11 }}>—</span>
+                      ) : shift === "late" ? (
+                        <span style={{ fontSize: 14, lineHeight: 1, filter: "drop-shadow(0 0 2px #000)" }} title="Tarde 11h–19h30">⭐</span>
+                      ) : shift === "day" ? (
+                        <span style={{ fontSize: 14, lineHeight: 1 }} title="Manhã 9h–17h30">☀️</span>
+                      ) : (
+                        <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#ffffff08" }} />
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -630,6 +687,10 @@ export default function HomeOfficeApp() {
 
   // absences: { "userId-YYYY-MM": daysOut }
   const [absences, setAbsences] = useState<Record<string, number>>({});
+  // shifts: { "userId-YYYY-MM-DD": "late" | "day" } — only for supervisor-assigned days
+  const [shifts, setShifts] = useState<Record<string, "late" | "day">>({});
+  // supervisor shift mode toggle — default late
+  const [superShiftMode, setSuperShiftMode] = useState<"late" | "day">("late");
 
   const handleLogin = (user: typeof TEAM[0]) => {
     setLoggedInUser(user);
@@ -702,9 +763,16 @@ export default function HomeOfficeApp() {
   useEffect(() => {
     const ref = doc(db, "absences", "all");
     const unsub = onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        setAbsences(snap.data() as Record<string, number>);
-      }
+      if (snap.exists()) setAbsences(snap.data() as Record<string, number>);
+    });
+    return () => unsub();
+  }, []);
+
+  // Shifts — always loaded
+  useEffect(() => {
+    const ref = doc(db, "shifts", "all");
+    const unsub = onSnapshot(ref, (snap) => {
+      if (snap.exists()) setShifts(snap.data() as Record<string, "late" | "day">);
     });
     return () => unsub();
   }, []);
@@ -717,6 +785,11 @@ export default function HomeOfficeApp() {
   const saveAbsences = async (newAbsences: Record<string, number>) => {
     const ref = doc(db, "absences", "all");
     await setDoc(ref, newAbsences);
+  };
+
+  const saveShifts = async (newShifts: Record<string, "late" | "day">) => {
+    const ref = doc(db, "shifts", "all");
+    await setDoc(ref, newShifts);
   };
 
   // Key for absence: "userId-YYYY-MM"
@@ -861,14 +934,25 @@ export default function HomeOfficeApp() {
         const newBookings = { ...bookings, [key]: dayBookings };
         setBookings(newBookings);
         await saveBookings(newBookings);
+        // Remove shift entry
+        const shiftKey = `${targetId}-${key}`;
+        const newShifts = { ...shifts };
+        delete newShifts[shiftKey];
+        setShifts(newShifts);
+        await saveShifts(newShifts);
         await writeAudit("super_remove", key, selectedUserForAdmin.name);
         showToast(`Removido: ${selectedUserForAdmin.name}`);
       } else {
         const newBookings = { ...bookings, [key]: [...dayBookings, -targetId] };
         setBookings(newBookings);
         await saveBookings(newBookings);
+        // Write shift entry
+        const shiftKey = `${targetId}-${key}`;
+        const newShifts = { ...shifts, [shiftKey]: superShiftMode };
+        setShifts(newShifts);
+        await saveShifts(newShifts);
         await writeAudit("super_assign", key, selectedUserForAdmin.name);
-        showToast(`Atribuído: ${selectedUserForAdmin.name}`);
+        showToast(`Atribuído: ${selectedUserForAdmin.name} (${superShiftMode === "late" ? "⭐ Tarde" : "☀️ Manhã"})`);
       }
       return;
     }
@@ -1074,6 +1158,21 @@ export default function HomeOfficeApp() {
                     color: "#fff", fontWeight: 700, fontSize: 13,
                   }}>{n}</button>
                 ))}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid #ffffff15", paddingLeft: 16 }}>
+                <span style={{ fontSize: 13, color: "#9ca3af" }}>Turno:</span>
+                <button onClick={() => setSuperShiftMode("late")} style={{
+                  padding: "4px 10px", borderRadius: 8, border: "none", cursor: "pointer",
+                  background: superShiftMode === "late" ? "#f59e0b" : "#ffffff15",
+                  color: superShiftMode === "late" ? "#000" : "#fff",
+                  fontWeight: 700, fontSize: 12,
+                }}>⭐ Tarde</button>
+                <button onClick={() => setSuperShiftMode("day")} style={{
+                  padding: "4px 10px", borderRadius: 8, border: "none", cursor: "pointer",
+                  background: superShiftMode === "day" ? "#6366f1" : "#ffffff15",
+                  color: "#fff",
+                  fontWeight: 700, fontSize: 12,
+                }}>☀️ Manhã</button>
               </div>
             </div>
           ) : (
@@ -1485,7 +1584,7 @@ export default function HomeOfficeApp() {
         </div>
       )}
 
-      {view === "schedules" && <SchedulesView />}
+      {view === "schedules" && <SchedulesView shifts={shifts} />}
 
       {view === "history" && currentUser.isSuper && !isVisitor && (
         <HistoryView
