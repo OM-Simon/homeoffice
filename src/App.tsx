@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc, collection, addDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { migrateShifts } from "./migrateShifts";
+migrateShifts();
 
 const TEAM = [
   { id: 1,  name: "Beatriz dos Santos", avatar: "BS",  color: "#6366f1", isSuper: false },
@@ -11,7 +13,7 @@ const TEAM = [
   { id: 6,  name: "João Silva",         avatar: "JSi", color: "#06b6d4", isSuper: false },
   { id: 7,  name: "Liane Bento",        avatar: "LB",  color: "#f43f5e", isSuper: false },
   { id: 8,  name: "Luis Abreu",         avatar: "LA",  color: "#84cc16", isSuper: false },
-  { id: 9,  name: "Miguel Fonseca",     avatar: "MF",  color: "#fb923c", isSuper: false },
+  { id: 9,  name: "Miguel Fonseca",     avatar: "MF",  color: "#3b82f6", isSuper: false },
   { id: 10, name: "Nuno Lopes",         avatar: "NL",  color: "#a78bfa", isSuper: false },
   { id: 11, name: "Ricardo Anderson",   avatar: "RA",  color: "#2dd4bf", isSuper: false },
   { id: 12, name: "Ricardo Coelho",     avatar: "RC",  color: "#fb7185", isSuper: false },
@@ -57,6 +59,9 @@ function getFirstDayOfMonth(year: number, month: number) {
 
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DAYS_PT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+
+// IDs of agents on the LATE shift (⭐ 11h00–19h30) — edit to match your team
+const LATE_SHIFT_IDS = [2, 5, 7, 10, 12];
 
 type AuditEntry = {
   id: string;
@@ -983,9 +988,10 @@ export default function HomeOfficeApp() {
     const newBookings = { ...bookings, [key]: [...dayBookings, currentUser.id] };
     setBookings(newBookings);
     await saveBookings(newBookings);
-    // Agent self-bookings are always day shift
+    // Shift is determined by the agent's schedule, not who booked
+    const agentShift = LATE_SHIFT_IDS.includes(currentUser.id) ? "late" : "day";
     const shiftKey = `${currentUser.id}-${key}`;
-    const newShifts = { ...shifts, [shiftKey]: "day" as const };
+    const newShifts = { ...shifts, [shiftKey]: agentShift };
     setShifts(newShifts);
     await saveShifts(newShifts);
     await writeAudit("book", key);
