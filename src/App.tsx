@@ -368,6 +368,86 @@ function CancelDialog({
   );
 }
 
+// ─── SCHEDULES DATA ───────────────────────────────────────────────────────────
+// ⭐ = 11h00–19h30  |  no star = 09h00–17h30
+// Edit the "late" array to change who has the star schedule
+const LATE_SHIFT_IDS = [2, 5, 7, 10, 12]; // Cláudia, João Santos, Liane, Nuno, Ricardo Coelho
+
+function SchedulesView() {
+  const lateShift  = TEAM.filter(u => !u.isSuper && LATE_SHIFT_IDS.includes(u.id));
+  const earlyShift = TEAM.filter(u => !u.isSuper && !LATE_SHIFT_IDS.includes(u.id));
+
+  const ShiftCard = ({ u }: { u: typeof TEAM[0] }) => (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 12,
+      background: "#ffffff06", border: "1px solid #ffffff0a",
+      borderRadius: 10, padding: "10px 14px",
+    }}>
+      <div style={{
+        width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
+        background: u.color, display: "flex", alignItems: "center",
+        justifyContent: "center", fontWeight: 700, fontSize: 12, color: "#fff",
+      }}>{u.avatar}</div>
+      <span style={{ fontWeight: 600, fontSize: 14 }}>{u.name}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "16px 24px 32px" }}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 20, color: "#9ca3af" }}>
+        Horários da Equipa
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+
+        {/* Late shift */}
+        <div style={{ background: "#ffffff04", border: "1px solid #ffffff0a", borderRadius: 14, padding: "18px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 10,
+              background: "linear-gradient(135deg, #f59e0b30, #f59e0b10)",
+              border: "1px solid #f59e0b40",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+            }}>⭐</div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>Turno Tarde</div>
+              <div style={{ fontSize: 13, color: "#f59e0b", fontWeight: 600 }}>11h00 – 19h30</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {lateShift.map(u => <ShiftCard key={u.id} u={u} />)}
+            {lateShift.length === 0 && (
+              <div style={{ color: "#4b5563", fontSize: 13, fontStyle: "italic" }}>Nenhum agente.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Early shift */}
+        <div style={{ background: "#ffffff04", border: "1px solid #ffffff0a", borderRadius: 14, padding: "18px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 10,
+              background: "linear-gradient(135deg, #6366f130, #6366f110)",
+              border: "1px solid #6366f140",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+            }}>☀️</div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>Turno Manhã</div>
+              <div style={{ fontSize: 13, color: "#818cf8", fontWeight: 600 }}>09h00 – 17h30</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {earlyShift.map(u => <ShiftCard key={u.id} u={u} />)}
+            {earlyShift.length === 0 && (
+              <div style={{ color: "#4b5563", fontSize: 13, fontStyle: "italic" }}>Nenhum agente.</div>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 const ACTION_LABELS: Record<AuditEntry["action"], { label: string; emoji: string; color: string }> = {
   book:          { label: "Reservou",          emoji: "🏠", color: "#10b981" },
   cancel:        { label: "Cancelou",          emoji: "✖️", color: "#ef4444" },
@@ -1034,14 +1114,14 @@ export default function HomeOfficeApp() {
 
       {/* View toggle */}
       <div style={{ padding: "16px 24px 0", display: "flex", gap: 8, alignItems: "center" }}>
-        {["calendar", "team", ...(currentUser.isSuper && !isVisitor ? ["history"] : [])].map(v => (
+        {["calendar", "team", "schedules", ...(currentUser.isSuper && !isVisitor ? ["history"] : [])].map(v => (
           <button key={v} onClick={() => setView(v)} style={{
             padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
             background: view === v ? (isVisitor ? "#6366f1" : currentUser.color) : "#ffffff10",
             color: view === v && currentUser.isSuper && !isVisitor ? "#000" : "#fff",
             fontWeight: 600, fontSize: 13, transition: "all 0.2s",
           }}>
-            {v === "calendar" ? "📅 Calendário" : v === "team" ? "👥 Equipa" : "📋 Histórico"}
+            {v === "calendar" ? "📅 Calendário" : v === "team" ? "👥 Equipa" : v === "schedules" ? "🕐 Horários" : "📋 Histórico"}
           </button>
         ))}
         {currentUser.isSuper && !isVisitor && (
@@ -1084,7 +1164,7 @@ export default function HomeOfficeApp() {
 
               return (
                 <div key={day} onClick={() => !isDisabled && toggleBooking(day)} style={{
-                  minHeight: 72, borderRadius: 10, padding: "8px 6px",
+                  minHeight: 90, borderRadius: 10, padding: "8px 6px",
                   background: isBookedByMe ? `${accentColor}25` : isToday ? "#ffffff08" : isWeekend ? "transparent" : "#ffffff05",
                   border: isBookedByMe ? `1.5px solid ${accentColor}60` : isToday ? "1.5px solid #ffffff20" : "1.5px solid transparent",
                   cursor: isVisitor ? "default" : isDisabled ? "default" : "pointer",
@@ -1120,29 +1200,29 @@ export default function HomeOfficeApp() {
                             const isLocked = uid < 0;
                             return u ? (
                               <div key={uid} title={isLocked ? `${u.name} (Supervisor)` : u.name} style={{
-                                width: 18, height: 18, borderRadius: "50%",
+                                width: 22, height: 22, borderRadius: "50%",
                                 background: u.color, display: "flex", alignItems: "center",
-                                justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff",
+                                justifyContent: "center", fontSize: 9, fontWeight: 700, color: "#fff",
                                 border: !isVisitor && Math.abs(uid) === currentUser.id ? "1.5px solid #fff" : "none",
                                 position: "relative",
                               }}>
                                 {u.avatar[0]}
-                                {isLocked && <div style={{ position: "absolute", top: -2, right: -2, fontSize: 7 }}>⭐</div>}
+                                {isLocked && <div style={{ position: "absolute", top: -2, right: -2, fontSize: 7, textShadow: "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000" }}>⭐</div>}
                               </div>
                             ) : null;
                           })}
                           {feriasCount > 0 && (
                             <div title={`Férias ×${feriasCount}`} style={{
-                              height: 18, borderRadius: 9, padding: "0 5px",
+                              height: 22, borderRadius: 11, padding: "0 6px",
                               background: "#f59e0b", display: "flex", alignItems: "center",
-                              justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#000", gap: 2,
+                              justifyContent: "center", fontSize: 9, fontWeight: 700, color: "#000", gap: 2,
                             }}>🏖️{feriasCount > 1 ? ` ×${feriasCount}` : ""}</div>
                           )}
                           {baixaCount > 0 && (
                             <div title={`Baixa ×${baixaCount}`} style={{
-                              height: 18, borderRadius: 9, padding: "0 5px",
+                              height: 22, borderRadius: 11, padding: "0 6px",
                               background: "#ef4444", display: "flex", alignItems: "center",
-                              justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff", gap: 2,
+                              justifyContent: "center", fontSize: 9, fontWeight: 700, color: "#fff", gap: 2,
                             }}>🤒{baixaCount > 1 ? ` ×${baixaCount}` : ""}</div>
                           )}
                         </>
@@ -1404,6 +1484,8 @@ export default function HomeOfficeApp() {
           </div>
         </div>
       )}
+
+      {view === "schedules" && <SchedulesView />}
 
       {view === "history" && currentUser.isSuper && !isVisitor && (
         <HistoryView
