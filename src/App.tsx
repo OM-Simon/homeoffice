@@ -2,9 +2,6 @@ import { useState, useMemo, useEffect } from "react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc, collection, addDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 
-import { migrateShifts } from "./migrateShifts";
-migrateShifts();
-
 const TEAM = [
   { id: 1,  name: "Beatriz dos Santos", avatar: "BS",  color: "#6366f1", isSuper: false },
   { id: 2,  name: "Cláudia Fortunato",  avatar: "CF",  color: "#f59e0b", isSuper: false },
