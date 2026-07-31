@@ -392,6 +392,12 @@ function SchedulesView({ shifts }: { shifts: Record<string, "late" | "day"> }) {
     return days;
   }, [viewYear, viewMonth, daysInMonth, firstDay]);
 
+  const actualDays = useMemo(() => {
+    const days: number[] = [];
+    for (let d = 1; d <= daysInMonth; d++) days.push(d);
+    return days;
+  }, [daysInMonth]);
+
   const getShiftKey = (userId: number, day: number) => {
     const dateKey = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     return `${userId}-${dateKey}`;
@@ -432,13 +438,12 @@ function SchedulesView({ shifts }: { shifts: Record<string, "late" | "day"> }) {
                 borderBottom: "1px solid #ffffff10", position: "sticky", left: 0,
                 background: "#0f0f13", zIndex: 1, minWidth: 130,
               }}>Agente</th>
-              {calendarDays.map((day, i) => {
-                if (!day) return null;
+              {actualDays.map(day => {
                 const dateObj = new Date(viewYear, viewMonth, day);
                 const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
                 const isToday = day === today.getDate() && viewMonth === currentMonth && viewYear === currentYear;
                 return (
-                  <th key={i} style={{
+                  <th key={day} style={{
                     padding: "6px 4px", fontSize: 11, fontWeight: 600,
                     color: isToday ? "#818cf8" : isWeekend ? "#374151" : "#6b7280",
                     borderBottom: "1px solid #ffffff10",
@@ -454,7 +459,6 @@ function SchedulesView({ shifts }: { shifts: Record<string, "late" | "day"> }) {
           <tbody>
             {agents.map((u, rowIdx) => (
               <tr key={u.id} style={{ background: rowIdx % 2 === 0 ? "#ffffff03" : "transparent" }}>
-                {/* Agent name cell */}
                 <td style={{
                   padding: "6px 10px", whiteSpace: "nowrap",
                   borderBottom: "1px solid #ffffff08",
@@ -470,16 +474,14 @@ function SchedulesView({ shifts }: { shifts: Record<string, "late" | "day"> }) {
                     <span style={{ fontSize: 12, fontWeight: 600, color: "#e8e8f0" }}>{u.name}</span>
                   </div>
                 </td>
-                {/* Day cells */}
-                {calendarDays.map((day, i) => {
-                  if (!day) return null;
+                {actualDays.map(day => {
                   const dateObj = new Date(viewYear, viewMonth, day);
                   const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
                   const isToday = day === today.getDate() && viewMonth === currentMonth && viewYear === currentYear;
                   const shiftKey = getShiftKey(u.id, day);
                   const shift = shifts[shiftKey];
                   return (
-                    <td key={i} style={{
+                    <td key={day} style={{
                       textAlign: "center", padding: "4px 2px",
                       borderBottom: "1px solid #ffffff08",
                       background: isToday ? "#6366f110" : isWeekend ? "transparent" : undefined,
